@@ -39,6 +39,49 @@ const registerUser = async (req, res) => {
     }
 };
 
+const loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // 1. Find user by email
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(401).json({
+                message: "Invalid email or password"
+            });
+        }
+
+        // 2. Compare entered password with stored hash
+        const isPasswordCorrect = await bcrypt.compare(
+            password,
+            user.password
+        );
+
+        if (!isPasswordCorrect) {
+            return res.status(401).json({
+                message: "Invalid email or password"
+            });
+        }
+
+        // 3. Send user information
+        res.status(200).json({
+            message: "Login successful",
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            message: error.message
+        });
+    }
+};
 module.exports = {
-    registerUser
+    registerUser,
+    loginUser
 };
