@@ -8,7 +8,7 @@ const {
     getClassroomById,
     updateClassroom,
     deleteClassroom
-} = require("../controllers/ClassroomController");
+} = require("../controllers/classroomController");
 
 router.post("/", createClassroom);
 router.get("/", getClassrooms);
