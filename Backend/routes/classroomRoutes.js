@@ -10,10 +10,13 @@ const {
     deleteClassroom
 } = require("../controllers/ClassroomController");
 
-router.post("/", createClassroom);
-router.get("/", getClassrooms);
-router.get("/:id", getClassroomById);
-router.put("/:id", updateClassroom);
-router.delete("/:id", deleteClassroom);
+
+const authMiddleware = require("../middleware/authMiddleware");
+
+router.post("/", authMiddleware, createClassroom);
+router.get("/", authMiddleware, getClassrooms);
+router.get("/:id", authMiddleware, getClassroomById);
+router.put("/:id", authMiddleware, updateClassroom);
+router.delete("/:id", authMiddleware, deleteClassroom);
 
 module.exports = router;
