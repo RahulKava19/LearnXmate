@@ -1,31 +1,34 @@
 const mongoose = require("mongoose");
 
-const classroomSchema = new mongoose.Schema({
-    id:
+const classroomSchema = new mongoose.Schema(
     {
-        type :  Number,
-        required : true,
-        unique : true
-    },
-    name: {
-        type: String,
-        required: true
-    },
+        id: {
+            type: Number,
+            required: true,
+            unique: true
+        },
 
-    description: {
-        type: String
-    },
+        name: {
+            type: String,
+            required: true,
+            trim: true
+        },
 
-    teacher: {
-        type: String,
-        required: true
-    },
+        description: {
+            type: String,
+            trim: true
+        },
 
-    createdAt: {
-        type: Date,
-        default: Date.now
+        teacher: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+        }
+    },
+    {
+        timestamps: true
     }
-});
+);
 
 const Classroom = mongoose.model("Classroom", classroomSchema);
 

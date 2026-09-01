@@ -2,13 +2,19 @@ const Classroom = require("../models/Classroom");
 
 const createClassroom = async (req, res) => {
     try {
-        const { id, name, description, teacher } = req.body;
+        const { id, name, description } = req.body;
+
+        if (req.user.role !== "teacher") {
+            return res.status(403).json({
+                message: "Only teachers can create classrooms"
+            });
+        }
 
         const classroom = await Classroom.create({
             id,
             name,
             description,
-            teacher
+            teacher: req.user.userId
         });
 
         res.status(201).json(classroom);
@@ -21,8 +27,10 @@ const createClassroom = async (req, res) => {
 
 const getClassrooms = async (req, res) => {
     try {
-        const classrooms = await Classroom.find();
-
+        const classrooms = await Classroom.find().populate(
+    "teacher",
+    "name email"
+);
         res.status(200).json(classrooms);
     } catch (error) {
         res.status(500).json({
@@ -34,9 +42,11 @@ const getClassrooms = async (req, res) => {
 const getClassroomById = async (req, res) => {
     try {
         const classroom = await Classroom.findOne({
-            id: req.params.id
-        });
-
+    id: req.params.id
+}).populate(
+    "teacher",
+    "name email"
+);
         if (!classroom) {
             return res.status(404).json({
                 message: "Classroom not found"
