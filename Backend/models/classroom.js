@@ -19,11 +19,26 @@ const classroomSchema = new mongoose.Schema(
             trim: true
         },
 
+        classCode: {
+            type: String,
+            required: true,
+            unique: true,
+            uppercase: true,
+            trim: true
+        },
+
         teacher: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true
-        }
+        },
+
+        students: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User"
+            }
+        ]
     },
     {
         timestamps: true
