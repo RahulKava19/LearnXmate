@@ -1,4 +1,5 @@
 const Document = require("../models/Document");
+const Classroom = require("../models/Classroom");
 
 const createDocument = async (req, res) => {
     try {
@@ -6,17 +7,39 @@ const createDocument = async (req, res) => {
             id,
             title,
             content,
-            classroom,
-            instructor,
             attachment
         } = req.body;
 
+        const classroomId = req.params.classroomId;
+
+        if (req.user.role !== "teacher") {
+            return res.status(403).json({
+                message: "Only instructors can create documents"
+            });
+        }
+
+        const Classroom = require("../models/Classroom");
+
+        const existingClassroom = await Classroom.findById(classroomId);
+
+        if (!existingClassroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+
+        // Check whether logged-in instructor owns the classroom
+        if (existingClassroom.teacher.toString() !== req.user.userId) {
+            return res.status(403).json({
+                message: "You are not the instructor of this classroom"
+            });
+        }
         const document = await Document.create({
             id,
             title,
             content,
-            classroom,
-            instructor,
+            classroom: req.params.classroomId,
+            instructor: req.user.userId,
             attachment
         });
 
@@ -45,7 +68,8 @@ const getDocuments = async (req, res) => {
 const getDocumentById = async (req, res) => {
     try {
         const document = await Document.findOne({
-            id: req.params.id
+            id: req.params.documentId,
+            classroom: req.params.classroomId
         });
 
         if (!document) {
@@ -63,26 +87,41 @@ const getDocumentById = async (req, res) => {
     }
 };
 
-const getDocumentsByClassroom = async (req, res) => {
-    try {
-        const documents = await Document.find({
-            classroom: req.params.classroomId
-        });
-
-        res.status(200).json(documents);
-
-    } catch (error) {
-        res.status(500).json({
-            message: error.message
-        });
-    }
-};
 
 const updateDocument = async (req, res) => {
     try {
+        if (req.user.role !== "teacher") {
+            return res.status(403).json({
+                message: "Only instructors can update documents"
+            });
+        }
+
+        const classroom = await Classroom.findById(
+            req.params.classroomId
+        );
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+
+        if (classroom.teacher.toString() !== req.user.userId) {
+            return res.status(403).json({
+                message: "You are not the instructor of this classroom"
+            });
+        }
+
         const document = await Document.findOneAndUpdate(
-            { id: req.params.id },
-            req.body,
+            {
+                id: Number(req.params.documentId),
+                classroom: req.params.classroomId
+            },
+            {
+                title: req.body.title,
+                content: req.body.content,
+                attachment: req.body.attachment
+            },
             {
                 new: true,
                 runValidators: true
@@ -106,8 +145,31 @@ const updateDocument = async (req, res) => {
 
 const deleteDocument = async (req, res) => {
     try {
+        if (req.user.role !== "teacher") {
+            return res.status(403).json({
+                message: "Only instructors can delete documents"
+            });
+        }
+
+        const classroom = await Classroom.findById(
+            req.params.classroomId
+        );
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+
+        if (classroom.teacher.toString() !== req.user.userId) {
+            return res.status(403).json({
+                message: "You are not the instructor of this classroom"
+            });
+        }
+
         const document = await Document.findOneAndDelete({
-            id: req.params.id
+            id: req.params.documentId,
+            classroom: req.params.classroomId
         });
 
         if (!document) {
@@ -132,7 +194,6 @@ module.exports = {
     createDocument,
     getDocuments,
     getDocumentById,
-    getDocumentsByClassroom,
     updateDocument,
     deleteDocument
 };

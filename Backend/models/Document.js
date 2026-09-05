@@ -19,12 +19,14 @@ const documentSchema = new mongoose.Schema({
     },
 
     classroom: {
-        type: Number,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Classroom",
         required: true
     },
 
     instructor: {
-        type: Number,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
         required: true
     },
 
