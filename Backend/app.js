@@ -16,7 +16,7 @@ app.get("/api/test", (req, res) => {
 });
 
 app.use("/api/classrooms", classroomRoutes);
-app.use("/api/documents", documentRoutes);
+app.use("/api/classrooms", documentRoutes);
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
