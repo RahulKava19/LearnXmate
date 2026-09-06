@@ -7,9 +7,14 @@ const userRoutes = require("./routes/userRoutes");
 const documentRoutes = require("./routes/DocumentRoutes");
 const app = express();
 const PORT = process.env.PORT || 5000;
+const path = require("path");
 
 connectDB();
 app.use(express.json());
+app.use(
+    "/uploads",
+    express.static(path.join(__dirname, "uploads"))
+);
 app.use("/api/users", userRoutes);
 app.get("/api/test", (req, res) => {
     res.send("API is working!");

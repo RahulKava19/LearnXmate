@@ -30,7 +30,7 @@ const documentSchema = new mongoose.Schema({
         required: true
     },
 
-    attachment: {
+    attachments: [{
         fileName: {
             type: String
         },
@@ -42,7 +42,7 @@ const documentSchema = new mongoose.Schema({
         fileUrl: {
             type: String
         }
-    },
+    }],
 
     createdAt: {
         type: Date,
