@@ -4,7 +4,8 @@ const router = express.Router();
 
 const authMiddleware = require("../middleware/authMiddleware");
 
-const uploadDocument = require("../middleware/uploadMiddleware");
+const createUploadMiddleware = require("../middleware/uploadMiddleware");
+const uploadDocument = createUploadMiddleware("documents");
 
 const {
     createDocument,
