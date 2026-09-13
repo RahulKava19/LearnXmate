@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const classroomSchema = new mongoose.Schema(
+const ClassroomSchema = new mongoose.Schema(
     {
         id: {
             type: Number,
@@ -24,6 +24,6 @@ const classroomSchema = new mongoose.Schema(
     }
 );
 
-const Classroom = mongoose.model("Classroom", classroomSchema);
+const Classroom = mongoose.model("Classroom", ClassroomSchema);
 
 module.exports = Classroom;
