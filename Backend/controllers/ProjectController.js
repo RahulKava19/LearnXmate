@@ -1,6 +1,6 @@
 const Project = require("../models/Project");
 const Classroom = require("../models/Classroom");
-
+const ClassroomInstructor = require("../models/ClassroomInstructor");
 const fs = require("fs");
 const path = require("path");
 
@@ -10,6 +10,7 @@ const createProject = async (req, res) => {
         const { id, title, description, dueDate } = req.body;
         const classroomId = req.params.classroomId;
 
+        
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can create projects"
@@ -24,7 +25,11 @@ const createProject = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -126,7 +131,11 @@ const updateProject = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -182,7 +191,11 @@ const deleteProject = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -250,7 +263,11 @@ const addAttachments = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -307,7 +324,11 @@ const deleteAttachment = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
