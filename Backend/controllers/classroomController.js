@@ -156,7 +156,6 @@ const deleteClassroom = async (req, res) => {
 
 module.exports = {
     createClassroom,
-    joinClassroom,
     getClassrooms,
     getClassroomById,
     updateClassroom,

@@ -9,7 +9,7 @@ const {
     getClassroomById,
     updateClassroom,
     deleteClassroom
-} = require("../controllers/classroomController");
+} = require("../controllers/ClassroomController");
 
 
 const authMiddleware = require("../middleware/authMiddleware");
