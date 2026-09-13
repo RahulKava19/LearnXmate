@@ -1,5 +1,6 @@
 const Document = require("../models/Document");
 const Classroom = require("../models/Classroom");
+const ClassroomInstructor = require("../models/ClassroomInstructor");
 const fs = require("fs");
 const path = require("path");
 
@@ -19,8 +20,6 @@ const createDocument = async (req, res) => {
             });
         }
 
-        const Classroom = require("../models/Classroom");
-
         const existingClassroom = await Classroom.findById(classroomId);
 
         if (!existingClassroom) {
@@ -29,8 +28,13 @@ const createDocument = async (req, res) => {
             });
         }
 
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: existingClassroom._id,
+            instructor: req.user.userId
+        });
+
         // Check whether logged-in instructor owns the classroom
-        if (existingClassroom.teacher.toString() !== req.user.userId) {
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -64,7 +68,17 @@ const createDocument = async (req, res) => {
 
 const getDocumentsByClassroom = async (req, res) => {
     try {
-        const documents = await Document.find();
+        const classroomId = req.params.classroomId;
+        const classroom = await Classroom.findById(classroomId);
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+        const documents = await Document.find({
+            classroom: classroomId
+    });
 
         res.status(200).json(documents);
 
@@ -116,7 +130,12 @@ const updateDocument = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -171,7 +190,11 @@ const deleteDocument = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -219,7 +242,11 @@ const addAttachments = async (req, res) => {
             });
         }
 
-        if (classroom.teacher.toString() !== req.user.userId) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
@@ -274,10 +301,11 @@ const deleteAttachment = async (req, res) => {
             });
         }
 
-        if (
-            classroom.teacher.toString() !==
-            req.user.userId
-        ) {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+        if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
