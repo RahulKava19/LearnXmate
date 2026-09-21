@@ -8,9 +8,9 @@ const {
     getClassrooms,
     getClassroomById,
     updateClassroom,
-    deleteClassroom
+    deleteClassroom,
+    getClassroomStudents
 } = require("../controllers/ClassroomController");
-
 
 const authMiddleware = require("../middleware/authMiddleware");
 
@@ -20,5 +20,5 @@ router.get("/", authMiddleware, getClassrooms);
 router.get("/:id", authMiddleware, getClassroomById);
 router.put("/:id", authMiddleware, updateClassroom);
 router.delete("/:id", authMiddleware, deleteClassroom);
-
+router.get("/:id/students", authMiddleware, getClassroomStudents);
 module.exports = router;
