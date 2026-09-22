@@ -56,6 +56,25 @@ const createProject = async (req, res) => {
         res.status(201).json(project);
 
     } catch (error) {
+        
+        // Remove uploaded files if project creation fails
+        if (req.files) {
+            for (const file of req.files) {
+
+                const filePath = path.join(
+                    __dirname,
+                    "..",
+                    "uploads",
+                    "projects",
+                    file.filename
+                );
+
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        }
+
         res.status(500).json({
             message: error.message
         });
