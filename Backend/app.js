@@ -6,6 +6,7 @@ const classroomRoutes = require("./routes/ClassroomRoutes");
 const userRoutes = require("./routes/userRoutes");
 const documentRoutes = require("./routes/DocumentRoutes");
 const projectRoutes = require("./routes/ProjectRoutes");
+const submissionRoutes = require("./routes/SubmissionRoutes");
 const app = express();
 const PORT = process.env.PORT || 5000;
 const path = require("path");
@@ -24,6 +25,8 @@ app.get("/api/test", (req, res) => {
 app.use("/api/classrooms", classroomRoutes);
 app.use("/api/classrooms", documentRoutes);
 app.use("/api/classrooms", projectRoutes);
+app.use("/api/classrooms", submissionRoutes);
+
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

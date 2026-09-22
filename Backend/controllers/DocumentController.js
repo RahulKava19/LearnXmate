@@ -60,6 +60,24 @@ const createDocument = async (req, res) => {
         res.status(201).json(document);
 
     } catch (error) {
+        // Remove uploaded files if document creation fails
+        if (req.files) {
+            for (const file of req.files) {
+
+                const filePath = path.join(
+                    __dirname,
+                    "..",
+                    "uploads",
+                    "documents",
+                    file.filename
+                );
+
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        }
+
         res.status(500).json({
             message: error.message
         });
