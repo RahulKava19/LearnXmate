@@ -1,7 +1,11 @@
 const crypto = require("crypto");
+
 const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
+const ClassroomStudent = require("../models/ClassroomStudent");
 
+
+// CREATE CLASSROOM
 const createClassroom = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -24,14 +28,14 @@ const createClassroom = async (req, res) => {
             existingClassroom = await Classroom.findOne({
                 classCode
             });
+
         } while (existingClassroom);
 
         const classroom = await Classroom.create({
             id,
             name,
             description,
-            classCode,
-            students: []
+            classCode
         });
 
         await ClassroomInstructor.create({
@@ -49,61 +53,13 @@ const createClassroom = async (req, res) => {
 };
 
 
-const joinClassroom = async (req, res) => {
-    try {
-        if (req.user.role !== "student") {
-            return res.status(403).json({
-                message: "Only students can join classrooms"
-            });
-        }
-
-        const { classCode } = req.body;
-
-        if (!classCode) {
-            return res.status(400).json({
-                message: "Class code is required"
-            });
-        }
-
-        const classroom = await Classroom.findOne({
-            classCode: classCode.toUpperCase()
-        });
-
-        if (!classroom) {
-            return res.status(404).json({
-                message: "Invalid class code"
-            });
-        }
-
-        if (classroom.students.includes(req.user.userId)) {
-            return res.status(400).json({
-                message: "You have already joined this classroom"
-            });
-        }
-
-        classroom.students.push(req.user.userId);
-
-        await classroom.save();
-
-        res.status(200).json({
-            message: "Classroom joined successfully",
-            classroom
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            message: error.message
-        });
-    }
-};
-
-
+// GET ALL CLASSROOMS
 const getClassrooms = async (req, res) => {
     try {
-        const classrooms = await Classroom.find()
-            .populate("students", "name email role");
+        const classrooms = await Classroom.find();
 
         res.status(200).json(classrooms);
+
     } catch (error) {
         res.status(500).json({
             message: error.message
@@ -112,11 +68,12 @@ const getClassrooms = async (req, res) => {
 };
 
 
+// GET CLASSROOM BY ID
 const getClassroomById = async (req, res) => {
     try {
         const classroom = await Classroom.findOne({
             id: Number(req.params.id)
-        }).populate("students", "name email role");
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -134,6 +91,7 @@ const getClassroomById = async (req, res) => {
 };
 
 
+// UPDATE CLASSROOM
 const updateClassroom = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -178,6 +136,7 @@ const updateClassroom = async (req, res) => {
 };
 
 
+// DELETE CLASSROOM
 const deleteClassroom = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -207,6 +166,10 @@ const deleteClassroom = async (req, res) => {
             });
         }
 
+        await ClassroomStudent.deleteMany({
+            classroom: classroom._id
+        });
+
         await ClassroomInstructor.deleteMany({
             classroom: classroom._id
         });
@@ -226,29 +189,54 @@ const deleteClassroom = async (req, res) => {
     }
 };
 
-const getClassroomStudents = async (req, res) => {
-    try {
-        const classroom = await Classroom.findOne({
-            id: Number(req.params.id)
-        }).populate(
-            "students",
-            "name email role"
-        );
 
-        if (!classroom) {
-            return res.status(404).json({
-                message: "Classroom not found"
+// JOIN CLASSROOM
+const joinClassroom = async (req, res) => {
+    try {
+        if (req.user.role !== "student") {
+            return res.status(403).json({
+                message: "Only students can join classrooms"
             });
         }
 
+        const { classCode } = req.body;
+
+        if (!classCode) {
+            return res.status(400).json({
+                message: "Class code is required"
+            });
+        }
+
+        const classroom = await Classroom.findOne({
+            classCode: classCode.toUpperCase()
+        });
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Invalid class code"
+            });
+        }
+
+        const alreadyJoined = await ClassroomStudent.findOne({
+            classroom: classroom._id,
+            student: req.user.userId
+        });
+
+        if (alreadyJoined) {
+            return res.status(400).json({
+                message: "You have already joined this classroom"
+            });
+        }
+
+        const classroomStudent = await ClassroomStudent.create({
+            classroom: classroom._id,
+            student: req.user.userId
+        });
+
         res.status(200).json({
-            classroom: {
-                id: classroom.id,
-                name: classroom.name,
-                description: classroom.description,
-                classCode: classroom.classCode
-            },
-            students: classroom.students
+            message: "Classroom joined successfully",
+            classroom,
+            enrollment: classroomStudent
         });
 
     } catch (error) {
@@ -258,12 +246,51 @@ const getClassroomStudents = async (req, res) => {
     }
 };
 
+
+// GET CLASSROOM STUDENTS
+const getClassroomStudents = async (req, res) => {
+    try {
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.id)
+        });
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+
+        const students = await ClassroomStudent.find({
+            classroom: classroom._id
+        }).populate(
+            "student",
+            "name email role"
+        );
+
+        res.status(200).json({
+            classroom: {
+                id: classroom.id,
+                name: classroom.name,
+                description: classroom.description,
+                classCode: classroom.classCode
+            },
+            students
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            message: error.message
+        });
+    }
+};
+
+
 module.exports = {
     createClassroom,
-    joinClassroom,
     getClassrooms,
     getClassroomById,
     updateClassroom,
     deleteClassroom,
+    joinClassroom,
     getClassroomStudents
 };
