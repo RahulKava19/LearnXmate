@@ -25,14 +25,7 @@ const ClassroomSchema = new mongoose.Schema(
             unique: true,
             uppercase: true,
             trim: true
-        },
-
-        students: [
-            {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: "User"
-            }
-        ]
+        }
     },
     {
         timestamps: true
