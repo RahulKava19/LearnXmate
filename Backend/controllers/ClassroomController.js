@@ -292,5 +292,5 @@ module.exports = {
     updateClassroom,
     deleteClassroom,
     joinClassroom,
-    getClassroomStudents
+    getClassroomStudents 
 };
