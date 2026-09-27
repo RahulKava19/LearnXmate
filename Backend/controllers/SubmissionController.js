@@ -2,6 +2,7 @@ const Submission = require("../models/Submission");
 const Project = require("../models/Project");
 const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
+const ClassroomStudents = require("../models/ClassroomStudent");
 
 
 const fs = require("fs");
@@ -32,12 +33,13 @@ const createSubmission = async (req, res) => {
         }
 
         // Check learner belongs to classroom
-        const isStudent = classroom.students.some(
-            studentId =>
-                studentId.toString() === req.user.userId
-        );
+        const student =
+            await ClassroomStudents.findOne({
+                classroom: classroom._id,
+                student: req.user.userId
+            });
 
-        if (!isStudent) {
+        if (!student) {
             return res.status(403).json({
                 message: "You are not a member of this classroom"
             });
@@ -241,6 +243,19 @@ const getSubmission = async (req, res) => {
                     message: "You can only view your own submission"
                 });
             }
+
+            const student =
+                await ClassroomStudents.findOne({
+                    classroom: classroom._id,
+                    student: req.user.userId
+                });
+
+            if (!student) {
+                return res.status(403).json({
+                    message:
+                        "You are not a member of this classroom"
+                });
+            }
         } else if (req.user.role === "teacher") {
             const instructor = await ClassroomInstructor.findOne({
                 classroom: classroom._id,
@@ -293,14 +308,16 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
-        const isStudent = classroom.students.some(
-            studentId =>
-                studentId.toString() === req.user.userId
-        );
+        const student =
+            await ClassroomStudents.findOne({
+                classroom: classroom._id,
+                student: req.user.userId
+            });
 
-        if (!isStudent) {
+        if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
 
@@ -430,14 +447,16 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
-        const isStudent = classroom.students.some(
-            studentId =>
-                studentId.toString() === req.user.userId
-        );
+        const student =
+            await ClassroomStudents.findOne({
+                classroom: classroom._id,
+                student: req.user.userId
+            });
 
-        if (!isStudent) {
+        if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
 
@@ -530,14 +549,16 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
-        const isStudent = classroom.students.some(
-            studentId =>
-                studentId.toString() === req.user.userId
-        );
+       const student =
+            await ClassroomStudents.findOne({
+                classroom: classroom._id,
+                student: req.user.userId
+            });
 
-        if (!isStudent) {
+        if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
 
