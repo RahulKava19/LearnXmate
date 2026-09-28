@@ -1,18 +1,76 @@
 const Document = require("../models/Document");
 const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
+const ClassroomStudent = require("../models/ClassroomStudent");
+
 const fs = require("fs");
 const path = require("path");
 
+
+// --------------------------------------------------
+// CHECK CLASSROOM ACCESS
+// --------------------------------------------------
+
+const checkClassroomAccess = async (classroomId, user) => {
+
+    const classroom = await Classroom.findById(classroomId);
+
+    if (!classroom) {
+        return {
+            allowed: false,
+            classroom: null,
+            message: "Classroom not found"
+        };
+    }
+
+    // Teacher must be an instructor
+    if (user.role === "teacher") {
+
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: user.userId
+        });
+
+        return {
+            allowed: !!instructor,
+            classroom,
+            message: instructor
+                ? null
+                : "You are not an instructor of this classroom"
+        };
+    }
+
+    // Student must be enrolled
+    if (user.role === "student") {
+
+        const student = await ClassroomStudent.findOne({
+            classroom: classroom._id,
+            student: user.userId
+        });
+
+        return {
+            allowed: !!student,
+            classroom,
+            message: student
+                ? null
+                : "You are not a member of this classroom"
+        };
+    }
+
+    return {
+        allowed: false,
+        classroom,
+        message: "You do not have access to this classroom"
+    };
+};
+
+
+// --------------------------------------------------
+// CREATE DOCUMENT
+// --------------------------------------------------
+
 const createDocument = async (req, res) => {
     try {
-        const {
-            id,
-            title,
-            content,
-        } = req.body;
-
-        const classroomId = req.params.classroomId;
 
         if (req.user.role !== "teacher") {
             return res.status(403).json({
@@ -20,20 +78,27 @@ const createDocument = async (req, res) => {
             });
         }
 
-        const existingClassroom = await Classroom.findById(classroomId);
+        const {
+            id,
+            title,
+            content
+        } = req.body;
 
-        if (!existingClassroom) {
+        const classroomId = req.params.classroomId;
+
+        const classroom = await Classroom.findById(classroomId);
+
+        if (!classroom) {
             return res.status(404).json({
                 message: "Classroom not found"
             });
         }
 
         const instructor = await ClassroomInstructor.findOne({
-            classroom: existingClassroom._id,
+            classroom: classroom._id,
             instructor: req.user.userId
         });
 
-        // Check whether logged-in instructor owns the classroom
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -52,7 +117,7 @@ const createDocument = async (req, res) => {
             id,
             title,
             content,
-            classroom: classroomId,
+            classroom: classroom._id,
             instructor: req.user.userId,
             attachments
         });
@@ -60,8 +125,10 @@ const createDocument = async (req, res) => {
         res.status(201).json(document);
 
     } catch (error) {
-        // Remove uploaded files if document creation fails
+
+        // Remove uploaded files if DB creation fails
         if (req.files) {
+
             for (const file of req.files) {
 
                 const filePath = path.join(
@@ -84,34 +151,73 @@ const createDocument = async (req, res) => {
     }
 };
 
+
+// --------------------------------------------------
+// GET DOCUMENTS BY CLASSROOM
+// --------------------------------------------------
+
 const getDocumentsByClassroom = async (req, res) => {
     try {
-        const classroomId = req.params.classroomId;
-        const classroom = await Classroom.findById(classroomId);
 
-        if (!classroom) {
+        const access = await checkClassroomAccess(
+            req.params.classroomId,
+            req.user
+        );
+
+        if (!access.classroom) {
             return res.status(404).json({
-                message: "Classroom not found"
+                message: access.message
             });
         }
+
+        if (!access.allowed) {
+            return res.status(403).json({
+                message: access.message
+            });
+        }
+
         const documents = await Document.find({
-            classroom: classroomId
-    });
+            classroom: access.classroom._id
+        });
 
         res.status(200).json(documents);
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
 
+
+// --------------------------------------------------
+// GET DOCUMENT BY ID
+// --------------------------------------------------
+
 const getDocumentById = async (req, res) => {
     try {
+
+        const access = await checkClassroomAccess(
+            req.params.classroomId,
+            req.user
+        );
+
+        if (!access.classroom) {
+            return res.status(404).json({
+                message: access.message
+            });
+        }
+
+        if (!access.allowed) {
+            return res.status(403).json({
+                message: access.message
+            });
+        }
+
         const document = await Document.findOne({
-            id: req.params.documentId,
-            classroom: req.params.classroomId
+            id: Number(req.params.documentId),
+            classroom: access.classroom._id
         });
 
         if (!document) {
@@ -123,6 +229,7 @@ const getDocumentById = async (req, res) => {
         res.status(200).json(document);
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
@@ -130,8 +237,13 @@ const getDocumentById = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// UPDATE DOCUMENT
+// --------------------------------------------------
+
 const updateDocument = async (req, res) => {
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can update documents"
@@ -162,12 +274,11 @@ const updateDocument = async (req, res) => {
         const document = await Document.findOneAndUpdate(
             {
                 id: Number(req.params.documentId),
-                classroom: req.params.classroomId
+                classroom: classroom._id
             },
             {
                 title: req.body.title,
-                content: req.body.content,
-                attachments: req.body.attachments
+                content: req.body.content
             },
             {
                 new: true,
@@ -184,14 +295,21 @@ const updateDocument = async (req, res) => {
         res.status(200).json(document);
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
 
+
+// --------------------------------------------------
+// DELETE DOCUMENT
+// --------------------------------------------------
+
 const deleteDocument = async (req, res) => {
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can delete documents"
@@ -212,15 +330,16 @@ const deleteDocument = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
             });
         }
 
-        const document = await Document.findOneAndDelete({
-            id: req.params.documentId,
-            classroom: req.params.classroomId
+        const document = await Document.findOne({
+            id: Number(req.params.documentId),
+            classroom: classroom._id
         });
 
         if (!document) {
@@ -229,12 +348,36 @@ const deleteDocument = async (req, res) => {
             });
         }
 
+        // Delete physical files
+        for (const attachment of document.attachments) {
+
+            const relativePath = attachment.fileUrl.replace(
+                /^\/+/,
+                ""
+            );
+
+            const filePath = path.join(
+                __dirname,
+                "..",
+                relativePath
+            );
+
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        await Document.deleteOne({
+            _id: document._id
+        });
+
         res.status(200).json({
             message: "Document deleted successfully",
             document
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
@@ -242,8 +385,13 @@ const deleteDocument = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// ADD ATTACHMENTS
+// --------------------------------------------------
+
 const addAttachments = async (req, res) => {
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can add attachments"
@@ -264,6 +412,7 @@ const addAttachments = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -272,12 +421,18 @@ const addAttachments = async (req, res) => {
 
         const document = await Document.findOne({
             id: Number(req.params.documentId),
-            classroom: req.params.classroomId
+            classroom: classroom._id
         });
 
         if (!document) {
             return res.status(404).json({
                 message: "Document not found"
+            });
+        }
+
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({
+                message: "No attachments provided"
             });
         }
 
@@ -294,6 +449,7 @@ const addAttachments = async (req, res) => {
         res.status(200).json(document);
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
@@ -301,8 +457,13 @@ const addAttachments = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// DELETE ATTACHMENT
+// --------------------------------------------------
+
 const deleteAttachment = async (req, res) => {
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can delete attachments"
@@ -323,6 +484,7 @@ const deleteAttachment = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -331,7 +493,7 @@ const deleteAttachment = async (req, res) => {
 
         const document = await Document.findOne({
             id: Number(req.params.documentId),
-            classroom: req.params.classroomId
+            classroom: classroom._id
         });
 
         if (!document) {
@@ -350,10 +512,15 @@ const deleteAttachment = async (req, res) => {
             });
         }
 
+        const relativePath = attachment.fileUrl.replace(
+            /^\/+/,
+            ""
+        );
+
         const filePath = path.join(
             __dirname,
             "..",
-            attachment.fileUrl
+            relativePath
         );
 
         if (fs.existsSync(filePath)) {
@@ -370,6 +537,7 @@ const deleteAttachment = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
