@@ -56,14 +56,43 @@ const createClassroom = async (req, res) => {
 // GET ALL CLASSROOMS
 const getClassrooms = async (req, res) => {
     try {
-        const classrooms = await Classroom.find();
+
+        let classrooms = [];
+
+        // Teacher
+        if (req.user.role === "teacher") {
+
+            const instructorLinks =
+                await ClassroomInstructor.find({
+                    instructor: req.user.userId
+                }).populate("classroom");
+
+            classrooms = instructorLinks
+                .map(link => link.classroom)
+                .filter(Boolean);
+        }
+
+        // Student
+        else if (req.user.role === "student") {
+
+            const studentLinks =
+                await ClassroomStudent.find({
+                    student: req.user.userId
+                }).populate("classroom");
+
+            classrooms = studentLinks
+                .map(link => link.classroom)
+                .filter(Boolean);
+        }
 
         res.status(200).json(classrooms);
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
+
     }
 };
 
@@ -71,6 +100,7 @@ const getClassrooms = async (req, res) => {
 // GET CLASSROOM BY ID
 const getClassroomById = async (req, res) => {
     try {
+
         const classroom = await Classroom.findOne({
             id: Number(req.params.id)
         });
@@ -81,12 +111,49 @@ const getClassroomById = async (req, res) => {
             });
         }
 
+
+        // Teacher access
+        if (req.user.role === "teacher") {
+
+            const instructor =
+                await ClassroomInstructor.findOne({
+                    classroom: classroom._id,
+                    instructor: req.user.userId
+                });
+
+            if (!instructor) {
+                return res.status(403).json({
+                    message: "You are not an instructor of this classroom"
+                });
+            }
+        }
+
+
+        // Student access
+        else if (req.user.role === "student") {
+
+            const student =
+                await ClassroomStudent.findOne({
+                    classroom: classroom._id,
+                    student: req.user.userId
+                });
+
+            if (!student) {
+                return res.status(403).json({
+                    message: "You are not a member of this classroom"
+                });
+            }
+        }
+
+
         res.status(200).json(classroom);
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
+
     }
 };
 
