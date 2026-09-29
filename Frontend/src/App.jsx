@@ -4,23 +4,64 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Classrooms from "./pages/Classrooms";
+import ProtectedRoute from "./components/ProtectedRoute";
+import ClassroomDetails from "./pages/ClassroomDetails";
 
 function App() {
     return (
         <BrowserRouter>
+
             <Routes>
 
-                <Route path="/" element={<Login />} />
+                {/* Public routes */}
 
-                <Route path="/login" element={<Login />} />
+                <Route
+                    path="/"
+                    element={<Login />}
+                />
 
-                <Route path="/register" element={<Register />} />
+                <Route
+                    path="/login"
+                    element={<Login />}
+                />
 
-                <Route path="/dashboard" element={<Dashboard />} />
+                <Route
+                    path="/register"
+                    element={<Register />}
+                />
 
-                <Route path="/classrooms" element={<Classrooms />} />
 
+                {/* Protected routes */}
+
+                <Route
+                    path="/dashboard"
+                    element={
+                        <ProtectedRoute>
+                            <Dashboard />
+                        </ProtectedRoute>
+                    }
+                />
+
+                <Route
+                    path="/classrooms"
+                    element={
+                        <ProtectedRoute>
+                            <Classrooms />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/classrooms/:id"
+                    element={
+                        <ProtectedRoute>
+                            <ClassroomDetails />
+                        </ProtectedRoute>
+                    }
+                />
+
+                
             </Routes>
+
         </BrowserRouter>
     );
 }
