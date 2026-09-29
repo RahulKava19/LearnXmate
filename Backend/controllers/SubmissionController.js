@@ -4,13 +4,37 @@ const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
 const ClassroomStudents = require("../models/ClassroomStudent");
 
+const uploadToCloudinary = require("../utils/cloudinaryUpload");
+const cloudinary = require("../config/cloudinary");
 
-const fs = require("fs");
-const path = require("path");
+
+// DELETE FILES FROM CLOUDINARY
+const deleteCloudinaryFiles = async (publicIds) => {
+
+    for (const publicId of publicIds) {
+
+        try {
+
+            await cloudinary.uploader.destroy(publicId, {
+                resource_type: "raw"
+            });
+
+        } catch (error) {
+
+            console.error(
+                `Failed to delete Cloudinary file: ${publicId}`,
+                error.message
+            );
+        }
+    }
+};
 
 
 // CREATE SUBMISSION
 const createSubmission = async (req, res) => {
+
+    const uploadedPublicIds = [];
+
     try {
 
         // Only learners can submit
@@ -23,8 +47,10 @@ const createSubmission = async (req, res) => {
         const classroomId = req.params.classroomId;
         const projectId = req.params.projectId;
 
-        // Check classroom
-        const classroom = await Classroom.findById(classroomId);
+        // Check classroom using custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -57,8 +83,8 @@ const createSubmission = async (req, res) => {
             });
         }
 
+        // Check deadline
         if (project.dueDate && new Date() > project.dueDate) {
-
             return res.status(400).json({
                 message: "The submission deadline has passed"
             });
@@ -83,12 +109,26 @@ const createSubmission = async (req, res) => {
             });
         }
 
-        // Create attachment information
-        const attachments = req.files.map(file => ({
-            fileName: file.originalname,
-            fileType: file.mimetype,
-            fileUrl: `/uploads/submissions/${file.filename}`
-        }));
+        // Upload files to Cloudinary
+        const attachments = [];
+
+        for (const file of req.files) {
+
+            const uploadedFile = await uploadToCloudinary(
+                file.buffer,
+                file.originalname,
+                "submissions"
+            );
+
+            uploadedPublicIds.push(uploadedFile.publicId);
+
+            attachments.push({
+                fileName: file.originalname,
+                fileType: file.mimetype,
+                fileUrl: uploadedFile.fileUrl,
+                publicId: uploadedFile.publicId
+            });
+        }
 
         const { id } = req.body;
 
@@ -103,23 +143,7 @@ const createSubmission = async (req, res) => {
 
     } catch (error) {
 
-        // If database creation fails after files were uploaded,
-        // remove those physical files.
-        if (req.files) {
-            for (const file of req.files) {
-                const filePath = path.join(
-                    __dirname,
-                    "..",
-                    "uploads",
-                    "submissions",
-                    file.filename
-                );
-
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        }
+        await deleteCloudinaryFiles(uploadedPublicIds);
 
         res.status(500).json({
             message: error.message
@@ -130,7 +154,9 @@ const createSubmission = async (req, res) => {
 
 // GET ALL SUBMISSIONS FOR A PROJECT
 const getProjectSubmissions = async (req, res) => {
+
     try {
+
         // Only instructors can view all submissions
         if (req.user.role !== "teacher") {
             return res.status(403).json({
@@ -141,8 +167,10 @@ const getProjectSubmissions = async (req, res) => {
         const classroomId = req.params.classroomId;
         const projectId = req.params.projectId;
 
-        // Check classroom
-        const classroom = await Classroom.findById(classroomId);
+        // Check classroom using custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -151,7 +179,6 @@ const getProjectSubmissions = async (req, res) => {
         }
 
         // Check whether instructor belongs to this classroom
-       
         const instructor = await ClassroomInstructor.findOne({
             classroom: classroom._id,
             instructor: req.user.userId
@@ -179,8 +206,8 @@ const getProjectSubmissions = async (req, res) => {
         const submissions = await Submission.find({
             project: project._id
         })
-            .populate("learner", "name email")  // populate will fetch the details of whole learner object 
-            .sort({ createdAt: -1 }); // Here we specified to fetch only name , email 
+            .populate("learner", "name email")
+            .sort({ createdAt: -1 });
 
         res.status(200).json({
             project: {
@@ -192,6 +219,7 @@ const getProjectSubmissions = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
@@ -201,10 +229,13 @@ const getProjectSubmissions = async (req, res) => {
 
 // GET ONE SUBMISSION
 const getSubmission = async (req, res) => {
+
     try {
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+
+        // Check classroom using custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -212,6 +243,7 @@ const getSubmission = async (req, res) => {
             });
         }
 
+        // Check project
         const project = await Project.findOne({
             id: Number(req.params.projectId),
             classroom: classroom._id
@@ -223,6 +255,7 @@ const getSubmission = async (req, res) => {
             });
         }
 
+        // Find submission
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
             project: project._id
@@ -234,7 +267,9 @@ const getSubmission = async (req, res) => {
             });
         }
 
+        // Student access
         if (req.user.role === "student") {
+
             if (
                 submission.learner._id.toString() !==
                 req.user.userId
@@ -256,7 +291,12 @@ const getSubmission = async (req, res) => {
                         "You are not a member of this classroom"
                 });
             }
-        } else if (req.user.role === "teacher") {
+
+        }
+
+        // Teacher access
+        else if (req.user.role === "teacher") {
+
             const instructor = await ClassroomInstructor.findOne({
                 classroom: classroom._id,
                 instructor: req.user.userId
@@ -267,7 +307,11 @@ const getSubmission = async (req, res) => {
                     message: "You are not the instructor of this classroom"
                 });
             }
-        } else {
+
+        }
+
+        else {
+
             return res.status(403).json({
                 message: "Access denied"
             });
@@ -283,24 +327,31 @@ const getSubmission = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
 
+
 // ADD SUBMISSION ATTACHMENTS
 const addSubmissionAttachments = async (req, res) => {
+
+    const uploadedPublicIds = [];
+
     try {
+
         if (req.user.role !== "student") {
             return res.status(403).json({
                 message: "Only learners can add submission files"
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        // Check classroom using custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -308,6 +359,7 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // Check learner belongs to classroom
         const student =
             await ClassroomStudents.findOne({
                 classroom: classroom._id,
@@ -316,11 +368,11 @@ const addSubmissionAttachments = async (req, res) => {
 
         if (!student) {
             return res.status(403).json({
-                message:
-                    "You are not a member of this classroom"
+                message: "You are not a member of this classroom"
             });
         }
 
+        // Check project
         const project = await Project.findOne({
             id: Number(req.params.projectId),
             classroom: classroom._id
@@ -332,12 +384,14 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // Check deadline
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
                 message: "The submission deadline has passed"
             });
         }
 
+        // Find submission
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
             project: project._id,
@@ -350,37 +404,40 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // At least one file required
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({
                 message: "At least one file is required"
             });
         }
 
+        // Maximum 10 files in one submission
         if (submission.attachments.length + req.files.length > 10) {
-            for (const file of req.files) {
-                const filePath = path.join(
-                    __dirname,
-                    "..",
-                    "uploads",
-                    "submissions",
-                    file.filename
-                );
-
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-
             return res.status(400).json({
                 message: "A submission can contain maximum 10 files"
             });
         }
 
-        const attachments = req.files.map(file => ({
-            fileName: file.originalname,
-            fileType: file.mimetype,
-            fileUrl: `/uploads/submissions/${file.filename}`
-        }));
+        // Upload files to Cloudinary
+        const attachments = [];
+
+        for (const file of req.files) {
+
+            const uploadedFile = await uploadToCloudinary(
+                file.buffer,
+                file.originalname,
+                "submissions"
+            );
+
+            uploadedPublicIds.push(uploadedFile.publicId);
+
+            attachments.push({
+                fileName: file.originalname,
+                fileType: file.mimetype,
+                fileUrl: uploadedFile.fileUrl,
+                publicId: uploadedFile.publicId
+            });
+        }
 
         const updatedSubmission =
             await Submission.findOneAndUpdate(
@@ -406,21 +463,8 @@ const addSubmissionAttachments = async (req, res) => {
         });
 
     } catch (error) {
-        if (req.files) {
-            for (const file of req.files) {
-                const filePath = path.join(
-                    __dirname,
-                    "..",
-                    "uploads",
-                    "submissions",
-                    file.filename
-                );
 
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        }
+        await deleteCloudinaryFiles(uploadedPublicIds);
 
         res.status(500).json({
             message: error.message
@@ -428,18 +472,22 @@ const addSubmissionAttachments = async (req, res) => {
     }
 };
 
+
 // DELETE SUBMISSION ATTACHMENT
 const deleteSubmissionAttachment = async (req, res) => {
+
     try {
+
         if (req.user.role !== "student") {
             return res.status(403).json({
                 message: "Only learners can delete submission files"
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        // Check classroom using custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -447,6 +495,7 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
+        // Check learner belongs to classroom
         const student =
             await ClassroomStudents.findOne({
                 classroom: classroom._id,
@@ -460,6 +509,7 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
+        // Check project
         const project = await Project.findOne({
             id: Number(req.params.projectId),
             classroom: classroom._id
@@ -471,12 +521,14 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
+        // Check deadline
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
                 message: "The submission deadline has passed"
             });
         }
 
+        // Find submission
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
             project: project._id,
@@ -489,9 +541,11 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
-        const attachment = submission.attachments.id(
-            req.params.attachmentId
-        );
+        // Find attachment
+        const attachment =
+            submission.attachments.id(
+                req.params.attachmentId
+            );
 
         if (!attachment) {
             return res.status(404).json({
@@ -499,22 +553,19 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
-        const filePath = path.join(
-            __dirname,
-            "..",
-            "uploads",
-            "submissions",
-            path.basename(attachment.fileUrl)
-        );
+        // Store Cloudinary public ID
+        const publicId = attachment.publicId;
 
+        // Remove attachment from database
         submission.attachments.pull(
             req.params.attachmentId
         );
 
         await submission.save();
 
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        // Delete file from Cloudinary
+        if (publicId) {
+            await deleteCloudinaryFiles([publicId]);
         }
 
         res.status(200).json({
@@ -523,6 +574,7 @@ const deleteSubmissionAttachment = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
@@ -532,16 +584,19 @@ const deleteSubmissionAttachment = async (req, res) => {
 
 // DELETE SUBMISSION
 const deleteSubmission = async (req, res) => {
+
     try {
+
         if (req.user.role !== "student") {
             return res.status(403).json({
                 message: "Only learners can delete submissions"
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        // Check classroom using custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -549,7 +604,8 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
-       const student =
+        // Check learner belongs to classroom
+        const student =
             await ClassroomStudents.findOne({
                 classroom: classroom._id,
                 student: req.user.userId
@@ -562,6 +618,7 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
+        // Check project
         const project = await Project.findOne({
             id: Number(req.params.projectId),
             classroom: classroom._id
@@ -573,12 +630,14 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
+        // Check deadline
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
                 message: "The submission deadline has passed"
             });
         }
 
+        // Find submission
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
             project: project._id,
@@ -591,37 +650,31 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
-        const filePaths = submission.attachments.map(
-            attachment =>
-                path.join(
-                    __dirname,
-                    "..",
-                    "uploads",
-                    "submissions",
-                    path.basename(attachment.fileUrl)
-                )
-        );
+        // Get Cloudinary public IDs
+        const publicIds = submission.attachments
+            .map(attachment => attachment.publicId)
+            .filter(Boolean);
 
+        // Delete submission from database
         await Submission.deleteOne({
             _id: submission._id
         });
 
-        for (const filePath of filePaths) {
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        }
+        // Delete all submission files from Cloudinary
+        await deleteCloudinaryFiles(publicIds);
 
         res.status(200).json({
             message: "Submission deleted successfully"
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
+
 
 module.exports = {
     createSubmission,

@@ -19,15 +19,28 @@ const {
 
 router.post(
     "/:classroomId/documents", 
-    authMiddleware, uploadDocument.array("attachments"),
+    authMiddleware, 
+    uploadDocument.array("attachments", 10),
     createDocument
 );
 
-router.get("/:classroomId/documents", authMiddleware, getDocumentsByClassroom);
+router.get(
+    "/:classroomId/documents", 
+    authMiddleware, 
+    getDocumentsByClassroom
+);
 
-router.get("/:classroomId/documents/:documentId", authMiddleware,  getDocumentById);
+router.get(
+    "/:classroomId/documents/:documentId", 
+    authMiddleware,  
+    getDocumentById
+);
 
-router.put("/:classroomId/documents/:documentId", authMiddleware, updateDocument);
+router.put(
+    "/:classroomId/documents/:documentId", 
+    authMiddleware, 
+    updateDocument
+);
 
 router.post(
     "/:classroomId/documents/:documentId/attachments",
@@ -42,6 +55,10 @@ router.delete(
     deleteAttachment
 );
 
-router.delete("/:classroomId/documents/:documentId", authMiddleware, deleteDocument);
+router.delete(
+    "/:classroomId/documents/:documentId", 
+    authMiddleware, 
+    deleteDocument
+);
 
 module.exports = router;

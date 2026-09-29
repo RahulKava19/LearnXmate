@@ -3,10 +3,24 @@ const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
 const ClassroomStudent = require("../models/ClassroomStudent");
 
-const fs = require("fs");
-const path = require("path");
+const uploadToCloudinary = require("../utils/cloudinaryUpload");
+const cloudinary = require("../config/cloudinary");
 
-
+// This will be helpful when mongoDb file creation fails then call this method to delete files from the Cloudinary
+const deleteCloudinaryFiles = async (publicIds) => {
+    for (const publicId of publicIds) {
+        try {
+            await cloudinary.uploader.destroy(publicId, {
+                resource_type: "raw"
+            });
+        } catch (error) {
+            console.error(
+                `Failed to delete Cloudinary file: ${publicId}`,
+                error.message
+            );
+        }
+    }
+};
 // --------------------------------------------------
 // CHECK CLASSROOM ACCESS
 // --------------------------------------------------
@@ -69,7 +83,11 @@ const checkClassroomAccess = async (classroomId, user) => {
 // --------------------------------------------------
 
 const createDocument = async (req, res) => {
+
+    const uploadedPublicIds = [];
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can create documents"
@@ -103,13 +121,29 @@ const createDocument = async (req, res) => {
             });
         }
 
-        const attachments = req.files
-            ? req.files.map(file => ({
-                fileName: file.originalname,
-                fileType: file.mimetype,
-                fileUrl: `/uploads/documents/${file.filename}`
-            }))
-            : [];
+        const attachments = [];
+
+        if (req.files && req.files.length > 0) {
+
+            for (const file of req.files) {
+
+                const uploadedFile = await uploadToCloudinary(
+                    file.buffer,
+                    file.originalname,
+                    "documents"
+                );
+
+                //It is simply an array that keeps track of the Cloudinary IDs of files we successfully uploaded.
+                uploadedPublicIds.push(uploadedFile.publicId);
+
+                attachments.push({
+                    fileName: file.originalname,
+                    fileType: file.mimetype,
+                    fileUrl: uploadedFile.fileUrl,
+                    publicId: uploadedFile.publicId
+                });
+            }
+        }
 
         const document = await Document.create({
             id,
@@ -124,29 +158,15 @@ const createDocument = async (req, res) => {
 
     } catch (error) {
 
-        if (req.files) {
-            for (const file of req.files) {
-
-                const filePath = path.join(
-                    __dirname,
-                    "..",
-                    "uploads",
-                    "documents",
-                    file.filename
-                );
-
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        }
+        // Remove files from Cloudinary
+        // if document creation/upload process failed.
+        await deleteCloudinaryFiles(uploadedPublicIds);
 
         res.status(500).json({
             message: error.message
         });
     }
 };
-
 
 // --------------------------------------------------
 // GET DOCUMENTS BY CLASSROOM
@@ -298,7 +318,9 @@ const updateDocument = async (req, res) => {
 // --------------------------------------------------
 
 const deleteDocument = async (req, res) => {
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can delete documents"
@@ -337,23 +359,16 @@ const deleteDocument = async (req, res) => {
             });
         }
 
-        for (const attachment of document.attachments) {
-            const relativePath = attachment.fileUrl.replace(/^\/+/, "");
-
-            const filePath = path.join(
-                __dirname,
-                "..",
-                relativePath
-            );
-
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        }
+        const publicIds = document.attachments
+            .map(attachment => attachment.publicId)
+            .filter(Boolean); // Remove falsy values like, undefined, 0, false...
+            // Useful when publicId == undefined
 
         await Document.deleteOne({
             _id: document._id
         });
+
+        await deleteCloudinaryFiles(publicIds);
 
         res.status(200).json({
             message: "Document deleted successfully",
@@ -361,19 +376,23 @@ const deleteDocument = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
 
-
 // --------------------------------------------------
 // ADD ATTACHMENTS
 // --------------------------------------------------
 
 const addAttachments = async (req, res) => {
+
+    const uploadedPublicIds = [];
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can add attachments"
@@ -418,11 +437,25 @@ const addAttachments = async (req, res) => {
             });
         }
 
-        const newAttachments = req.files.map(file => ({
-            fileName: file.originalname,
-            fileType: file.mimetype,
-            fileUrl: `/uploads/documents/${file.filename}`
-        }));
+        const newAttachments = [];
+
+        for (const file of req.files) {
+
+            const uploadedFile = await uploadToCloudinary(
+                file.buffer,
+                file.originalname,
+                "documents"
+            );
+
+            uploadedPublicIds.push(uploadedFile.publicId);
+
+            newAttachments.push({
+                fileName: file.originalname,
+                fileType: file.mimetype,
+                fileUrl: uploadedFile.fileUrl,
+                publicId: uploadedFile.publicId
+            });
+        }
 
         document.attachments.push(...newAttachments);
 
@@ -431,19 +464,23 @@ const addAttachments = async (req, res) => {
         res.status(200).json(document);
 
     } catch (error) {
+
+        await deleteCloudinaryFiles(uploadedPublicIds);
+
         res.status(500).json({
             message: error.message
         });
     }
 };
 
-
 // --------------------------------------------------
 // DELETE ATTACHMENT
 // --------------------------------------------------
 
 const deleteAttachment = async (req, res) => {
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can delete attachments"
@@ -492,21 +529,15 @@ const deleteAttachment = async (req, res) => {
             });
         }
 
-        const relativePath = attachment.fileUrl.replace(/^\/+/, "");
-
-        const filePath = path.join(
-            __dirname,
-            "..",
-            relativePath
-        );
-
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
+        const publicId = attachment.publicId;
 
         attachment.deleteOne();
 
         await document.save();
+
+        if (publicId) {
+            await deleteCloudinaryFiles([publicId]);
+        }
 
         res.status(200).json({
             message: "Attachment deleted successfully",
@@ -514,12 +545,12 @@ const deleteAttachment = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
-
 
 module.exports = {
     createDocument,
