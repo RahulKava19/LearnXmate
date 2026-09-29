@@ -1,5 +1,6 @@
 const express = require("express");
 require("dotenv").config();
+const cors = require("cors");
 
 const connectDB = require("./config/db");
 const classroomRoutes = require("./routes/ClassroomRoutes");
@@ -15,6 +16,7 @@ const path = require("path");
 
 connectDB();
 app.use(express.json());
+app.use(cors());
 app.use(
     "/uploads",
     express.static(path.join(__dirname, "uploads"))
