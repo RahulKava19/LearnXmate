@@ -3,9 +3,23 @@ const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
 const ClassroomStudent = require("../models/ClassroomStudent");
 
-const fs = require("fs");
-const path = require("path");
+const uploadToCloudinary = require("../utils/cloudinaryUpload");
+const cloudinary = require("../config/cloudinary");
 
+const deleteCloudinaryFiles = async (publicIds) => {
+    for (const publicId of publicIds) {
+        try {
+            await cloudinary.uploader.destroy(publicId, {
+                resource_type: "raw"
+            });
+        } catch (error) {
+            console.error(
+                `Failed to delete Cloudinary file: ${publicId}`,
+                error.message
+            );
+        }
+    }
+};
 
 // --------------------------------------------------
 // CHECK CLASSROOM ACCESS
@@ -69,7 +83,11 @@ const checkClassroomAccess = async (classroomId, user) => {
 // --------------------------------------------------
 
 const createProject = async (req, res) => {
+
+    const uploadedPublicIds = [];
+
     try {
+
         const {
             id,
             title,
@@ -104,23 +122,34 @@ const createProject = async (req, res) => {
             });
         }
 
-        const attachments = req.files
-            ? req.files.map(file => ({
-                fileName: file.originalname,
-                fileType: file.mimetype,
-                fileUrl: `/uploads/projects/${file.filename}`
-            }))
-            : [];
+        const attachments = [];
+
+        if (req.files && req.files.length > 0) {
+
+            for (const file of req.files) {
+
+                const uploadedFile = await uploadToCloudinary(
+                    file.buffer,
+                    file.originalname,
+                    "projects"
+                );
+
+                uploadedPublicIds.push(uploadedFile.publicId);
+
+                attachments.push({
+                    fileName: file.originalname,
+                    fileType: file.mimetype,
+                    fileUrl: uploadedFile.fileUrl,
+                    publicId: uploadedFile.publicId
+                });
+            }
+        }
 
         const project = await Project.create({
             id,
             title,
             description,
-
-            // IMPORTANT:
-            // Store MongoDB ObjectId in the reference field
             classroom: classroom._id,
-
             instructor: req.user.userId,
             dueDate,
             attachments
@@ -130,29 +159,13 @@ const createProject = async (req, res) => {
 
     } catch (error) {
 
-        if (req.files) {
-            for (const file of req.files) {
-
-                const filePath = path.join(
-                    __dirname,
-                    "..",
-                    "uploads",
-                    "projects",
-                    file.filename
-                );
-
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        }
+        await deleteCloudinaryFiles(uploadedPublicIds);
 
         res.status(500).json({
             message: error.message
         });
     }
 };
-
 
 // --------------------------------------------------
 // GET PROJECTS BY CLASSROOM
@@ -305,7 +318,9 @@ const updateProject = async (req, res) => {
 // --------------------------------------------------
 
 const deleteProject = async (req, res) => {
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can delete projects"
@@ -344,27 +359,15 @@ const deleteProject = async (req, res) => {
             });
         }
 
-        for (const attachment of project.attachments) {
-            const fileName = path.basename(
-                attachment.fileUrl
-            );
-
-            const filePath = path.join(
-                __dirname,
-                "..",
-                "uploads",
-                "projects",
-                fileName
-            );
-
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        }
+        const publicIds = project.attachments
+            .map(attachment => attachment.publicId)
+            .filter(Boolean);
 
         await Project.deleteOne({
             _id: project._id
         });
+
+        await deleteCloudinaryFiles(publicIds);
 
         res.status(200).json({
             message: "Project deleted successfully",
@@ -372,19 +375,23 @@ const deleteProject = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
 
-
 // --------------------------------------------------
 // ADD ATTACHMENTS
 // --------------------------------------------------
 
 const addAttachments = async (req, res) => {
+
+    const uploadedPublicIds = [];
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can add attachments"
@@ -423,13 +430,31 @@ const addAttachments = async (req, res) => {
             });
         }
 
-        const newAttachments = req.files
-            ? req.files.map(file => ({
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({
+                message: "No attachments provided"
+            });
+        }
+
+        const newAttachments = [];
+
+        for (const file of req.files) {
+
+            const uploadedFile = await uploadToCloudinary(
+                file.buffer,
+                file.originalname,
+                "projects"
+            );
+
+            uploadedPublicIds.push(uploadedFile.publicId);
+
+            newAttachments.push({
                 fileName: file.originalname,
                 fileType: file.mimetype,
-                fileUrl: `/uploads/projects/${file.filename}`
-            }))
-            : [];
+                fileUrl: uploadedFile.fileUrl,
+                publicId: uploadedFile.publicId
+            });
+        }
 
         project.attachments.push(...newAttachments);
 
@@ -438,6 +463,9 @@ const addAttachments = async (req, res) => {
         res.status(200).json(project);
 
     } catch (error) {
+
+        await deleteCloudinaryFiles(uploadedPublicIds);
+
         res.status(500).json({
             message: error.message
         });
@@ -450,7 +478,9 @@ const addAttachments = async (req, res) => {
 // --------------------------------------------------
 
 const deleteAttachment = async (req, res) => {
+
     try {
+
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can delete attachments"
@@ -499,25 +529,15 @@ const deleteAttachment = async (req, res) => {
             });
         }
 
-        const fileName = path.basename(
-            attachment.fileUrl
-        );
-
-        const filePath = path.join(
-            __dirname,
-            "..",
-            "uploads",
-            "projects",
-            fileName
-        );
-
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
+        const publicId = attachment.publicId;
 
         attachment.deleteOne();
 
         await project.save();
+
+        if (publicId) {
+            await deleteCloudinaryFiles([publicId]);
+        }
 
         res.status(200).json({
             message: "Attachment deleted successfully",
@@ -525,12 +545,12 @@ const deleteAttachment = async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: error.message
         });
     }
 };
-
 
 module.exports = {
     createProject,
