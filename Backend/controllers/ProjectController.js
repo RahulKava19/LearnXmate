@@ -1,23 +1,91 @@
 const Project = require("../models/Project");
 const Classroom = require("../models/Classroom");
 const ClassroomInstructor = require("../models/ClassroomInstructor");
+const ClassroomStudent = require("../models/ClassroomStudent");
+
 const fs = require("fs");
 const path = require("path");
 
 
+// --------------------------------------------------
+// CHECK CLASSROOM ACCESS
+// --------------------------------------------------
+
+const checkClassroomAccess = async (classroomId, user) => {
+    const classroom = await Classroom.findOne({
+        id: Number(classroomId)
+    });
+
+    if (!classroom) {
+        return {
+            allowed: false,
+            classroom: null,
+            message: "Classroom not found"
+        };
+    }
+
+    // Teacher must be an instructor
+    if (user.role === "teacher") {
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: user.userId
+        });
+
+        return {
+            allowed: !!instructor,
+            classroom,
+            message: instructor
+                ? null
+                : "You are not an instructor of this classroom"
+        };
+    }
+
+    // Student must be enrolled
+    if (user.role === "student") {
+        const student = await ClassroomStudent.findOne({
+            classroom: classroom._id,
+            student: user.userId
+        });
+
+        return {
+            allowed: !!student,
+            classroom,
+            message: student
+                ? null
+                : "You are not a member of this classroom"
+        };
+    }
+
+    return {
+        allowed: false,
+        classroom,
+        message: "You do not have access to this classroom"
+    };
+};
+
+
+// --------------------------------------------------
+// CREATE PROJECT
+// --------------------------------------------------
+
 const createProject = async (req, res) => {
     try {
-        const { id, title, description, dueDate } = req.body;
-        const classroomId = req.params.classroomId;
+        const {
+            id,
+            title,
+            description,
+            dueDate
+        } = req.body;
 
-        
         if (req.user.role !== "teacher") {
             return res.status(403).json({
                 message: "Only instructors can create projects"
             });
         }
 
-        const classroom = await Classroom.findById(classroomId);
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -29,6 +97,7 @@ const createProject = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -47,7 +116,11 @@ const createProject = async (req, res) => {
             id,
             title,
             description,
-            classroom: classroomId,
+
+            // IMPORTANT:
+            // Store MongoDB ObjectId in the reference field
+            classroom: classroom._id,
+
             instructor: req.user.userId,
             dueDate,
             attachments
@@ -56,8 +129,7 @@ const createProject = async (req, res) => {
         res.status(201).json(project);
 
     } catch (error) {
-        
-        // Remove uploaded files if project creation fails
+
         if (req.files) {
             for (const file of req.files) {
 
@@ -82,20 +154,31 @@ const createProject = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// GET PROJECTS BY CLASSROOM
+// --------------------------------------------------
+
 const getProjectsByClassroom = async (req, res) => {
     try {
-        const classroomId = req.params.classroomId;
+        const access = await checkClassroomAccess(
+            req.params.classroomId,
+            req.user
+        );
 
-        const classroom = await Classroom.findById(classroomId);
-
-        if (!classroom) {
+        if (!access.classroom) {
             return res.status(404).json({
-                message: "Classroom not found"
+                message: access.message
+            });
+        }
+
+        if (!access.allowed) {
+            return res.status(403).json({
+                message: access.message
             });
         }
 
         const projects = await Project.find({
-            classroom: classroomId
+            classroom: access.classroom._id
         });
 
         res.status(200).json(projects);
@@ -108,12 +191,32 @@ const getProjectsByClassroom = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// GET PROJECT BY ID
+// --------------------------------------------------
 
 const getProjectById = async (req, res) => {
     try {
+        const access = await checkClassroomAccess(
+            req.params.classroomId,
+            req.user
+        );
+
+        if (!access.classroom) {
+            return res.status(404).json({
+                message: access.message
+            });
+        }
+
+        if (!access.allowed) {
+            return res.status(403).json({
+                message: access.message
+            });
+        }
+
         const project = await Project.findOne({
             id: Number(req.params.projectId),
-            classroom: req.params.classroomId
+            classroom: access.classroom._id
         });
 
         if (!project) {
@@ -132,6 +235,10 @@ const getProjectById = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// UPDATE PROJECT
+// --------------------------------------------------
+
 const updateProject = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -140,9 +247,9 @@ const updateProject = async (req, res) => {
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -154,6 +261,7 @@ const updateProject = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -163,7 +271,7 @@ const updateProject = async (req, res) => {
         const project = await Project.findOneAndUpdate(
             {
                 id: Number(req.params.projectId),
-                classroom: req.params.classroomId
+                classroom: classroom._id
             },
             {
                 title: req.body.title,
@@ -192,6 +300,10 @@ const updateProject = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// DELETE PROJECT
+// --------------------------------------------------
+
 const deleteProject = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -200,9 +312,9 @@ const deleteProject = async (req, res) => {
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -214,6 +326,7 @@ const deleteProject = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -222,7 +335,7 @@ const deleteProject = async (req, res) => {
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
-            classroom: req.params.classroomId
+            classroom: classroom._id
         });
 
         if (!project) {
@@ -232,7 +345,9 @@ const deleteProject = async (req, res) => {
         }
 
         for (const attachment of project.attachments) {
-            const fileName = path.basename(attachment.fileUrl);
+            const fileName = path.basename(
+                attachment.fileUrl
+            );
 
             const filePath = path.join(
                 __dirname,
@@ -264,6 +379,10 @@ const deleteProject = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// ADD ATTACHMENTS
+// --------------------------------------------------
+
 const addAttachments = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -272,9 +391,9 @@ const addAttachments = async (req, res) => {
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -286,6 +405,7 @@ const addAttachments = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -294,7 +414,7 @@ const addAttachments = async (req, res) => {
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
-            classroom: req.params.classroomId
+            classroom: classroom._id
         });
 
         if (!project) {
@@ -325,6 +445,10 @@ const addAttachments = async (req, res) => {
 };
 
 
+// --------------------------------------------------
+// DELETE ATTACHMENT
+// --------------------------------------------------
+
 const deleteAttachment = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
@@ -333,9 +457,9 @@ const deleteAttachment = async (req, res) => {
             });
         }
 
-        const classroom = await Classroom.findById(
-            req.params.classroomId
-        );
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
 
         if (!classroom) {
             return res.status(404).json({
@@ -347,6 +471,7 @@ const deleteAttachment = async (req, res) => {
             classroom: classroom._id,
             instructor: req.user.userId
         });
+
         if (!instructor) {
             return res.status(403).json({
                 message: "You are not the instructor of this classroom"
@@ -355,7 +480,7 @@ const deleteAttachment = async (req, res) => {
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
-            classroom: req.params.classroomId
+            classroom: classroom._id
         });
 
         if (!project) {
@@ -405,6 +530,7 @@ const deleteAttachment = async (req, res) => {
         });
     }
 };
+
 
 module.exports = {
     createProject,
