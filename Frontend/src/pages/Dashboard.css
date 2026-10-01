@@ -914,3 +914,220 @@
     }
 }
 
+
+/* =========================================================
+   CLASSROOM TITLE + EDIT BUTTON
+========================================================= */
+
+.classroom-title-row {
+    display: flex;
+
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    margin-bottom: 8px;
+}
+
+.classroom-title-row h3 {
+    margin: 0;
+}
+
+
+/* =========================================================
+   EDIT CLASSROOM BUTTON
+========================================================= */
+
+.edit-classroom-button {
+    border: 1px solid #dbeafe;
+
+    background: #eff6ff;
+
+    color: #2563eb;
+
+    border-radius: 7px;
+
+    padding: 5px 9px;
+
+    font-size: 11px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+    flex-shrink: 0;
+
+    transition: 0.2s;
+}
+
+.edit-classroom-button:hover {
+    background: #dbeafe;
+
+    border-color: #bfdbfe;
+}
+
+/* =========================================================
+   CLASSROOM ACTIONS
+========================================================= */
+
+.classroom-actions {
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    flex-shrink: 0;
+}
+
+
+/* =========================================================
+   DELETE BUTTON
+========================================================= */
+
+.delete-classroom-button {
+    border: 1px solid #fee2e2;
+
+    background: #fef2f2;
+
+    color: #dc2626;
+
+    border-radius: 7px;
+
+    padding: 5px 9px;
+
+    font-size: 11px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: 0.2s;
+}
+
+.delete-classroom-button:hover {
+    background: #fee2e2;
+
+    border-color: #fecaca;
+}
+
+
+/* =========================================================
+   DELETE MODAL
+========================================================= */
+
+.delete-classroom-modal {
+    width: 100%;
+
+    max-width: 430px;
+
+    background: white;
+
+    border-radius: 16px;
+
+    padding: 30px;
+
+    text-align: center;
+
+    box-shadow:
+        0 25px 60px rgba(0, 0, 0, 0.18);
+}
+
+
+/* =========================================================
+   DELETE ICON
+========================================================= */
+
+.delete-icon {
+    width: 52px;
+    height: 52px;
+
+    border-radius: 50%;
+
+    background: #fef2f2;
+
+    color: #dc2626;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    margin: 0 auto 18px;
+
+    font-size: 24px;
+
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   DELETE MODAL TEXT
+========================================================= */
+
+.delete-classroom-modal h2 {
+    margin: 0 0 10px;
+
+    color: #172033;
+
+    font-size: 21px;
+}
+
+.delete-classroom-modal p {
+    color: #64748b;
+
+    font-size: 14px;
+
+    line-height: 1.6;
+
+    margin: 0;
+}
+
+.delete-classroom-modal strong {
+    color: #334155;
+}
+
+
+/* =========================================================
+   DELETE MODAL ACTIONS
+========================================================= */
+
+.delete-modal-actions {
+    display: flex;
+
+    justify-content: center;
+
+    gap: 10px;
+
+    margin-top: 25px;
+}
+
+
+.confirm-delete-button {
+    border: none;
+
+    border-radius: 8px;
+
+    background: #dc2626;
+
+    color: white;
+
+    padding: 10px 17px;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.confirm-delete-button:hover {
+    background: #b91c1c;
+}
+
+.confirm-delete-button:disabled {
+    opacity: 0.6;
+
+    cursor: not-allowed;
+}

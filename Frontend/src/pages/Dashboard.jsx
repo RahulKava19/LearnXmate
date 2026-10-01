@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -11,19 +10,42 @@ function Dashboard() {
 
     const navigate = useNavigate();
 
+    // =====================================================
+    // STATE
+    // =====================================================
+
     const [classrooms, setClassrooms] = useState([]);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    // Create
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createLoading, setCreateLoading] = useState(false);
+    const [createError, setCreateError] = useState("");
 
+    // Edit
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingClassroom, setEditingClassroom] = useState(null);
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError] = useState("");
+
+    // Delete
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deletingClassroom, setDeletingClassroom] = useState(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+    const [deleteError, setDeleteError] = useState("");
+
+    // Form
     const [classroomForm, setClassroomForm] = useState({
         name: "",
         description: ""
     });
 
-    const [createLoading, setCreateLoading] = useState(false);
-    const [createError, setCreateError] = useState("");
+
+    // =====================================================
+    // USER
+    // =====================================================
 
     const user = JSON.parse(
         localStorage.getItem("user")
@@ -32,7 +54,9 @@ function Dashboard() {
     const isTeacher = user?.role === "teacher";
 
 
-    // ================= FETCH CLASSROOMS =================
+    // =====================================================
+    // FETCH CLASSROOMS
+    // =====================================================
 
     const fetchClassrooms = async () => {
 
@@ -78,7 +102,9 @@ function Dashboard() {
     }, []);
 
 
-    // ================= FORM HANDLER =================
+    // =====================================================
+    // FORM CHANGE
+    // =====================================================
 
     const handleChange = (event) => {
 
@@ -92,7 +118,9 @@ function Dashboard() {
     };
 
 
-    // ================= CREATE CLASSROOM =================
+    // =====================================================
+    // CREATE CLASSROOM
+    // =====================================================
 
     const handleCreateClassroom = async (event) => {
 
@@ -116,21 +144,10 @@ function Dashboard() {
 
             const token = localStorage.getItem("token");
 
-
-            /*
-             * Our backend currently requires
-             * a numeric classroom ID.
-             *
-             * We generate a unique numeric ID here.
-             */
-            const classroomId =
-                Date.now();
-
-
             const response = await axios.post(
                 "http://localhost:5000/api/classrooms",
                 {
-                    id: classroomId,
+                    id: Date.now(),
                     name: classroomForm.name.trim(),
                     description:
                         classroomForm.description.trim()
@@ -160,7 +177,6 @@ function Dashboard() {
             // Close modal
             setShowCreateModal(false);
 
-
         } catch (error) {
 
             console.error(error);
@@ -178,7 +194,190 @@ function Dashboard() {
     };
 
 
-    // ================= CLOSE MODAL =================
+    // =====================================================
+    // OPEN EDIT MODAL
+    // =====================================================
+
+    const openEditModal = (event, classroom) => {
+
+        // Prevent classroom card click
+        event.stopPropagation();
+
+        setEditingClassroom(classroom);
+
+        setClassroomForm({
+            name: classroom.name || "",
+            description: classroom.description || ""
+        });
+
+        setEditError("");
+
+        setShowEditModal(true);
+    };
+
+
+    // =====================================================
+    // UPDATE CLASSROOM
+    // =====================================================
+
+    const handleEditClassroom = async (event) => {
+
+        event.preventDefault();
+
+        setEditError("");
+
+        if (!classroomForm.name.trim()) {
+
+            setEditError(
+                "Classroom name is required"
+            );
+
+            return;
+        }
+
+        if (!editingClassroom) {
+            return;
+        }
+
+
+        try {
+
+            setEditLoading(true);
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.put(
+                `http://localhost:5000/api/classrooms/${editingClassroom.id}`,
+                {
+                    name: classroomForm.name.trim(),
+                    description:
+                        classroomForm.description.trim()
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+
+            // Replace old classroom with updated classroom
+            setClassrooms((previous) =>
+                previous.map((classroom) =>
+                    classroom._id === editingClassroom._id
+                        ? response.data
+                        : classroom
+                )
+            );
+
+
+            setShowEditModal(false);
+
+            setEditingClassroom(null);
+
+            setClassroomForm({
+                name: "",
+                description: ""
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            setEditError(
+                error.response?.data?.message ||
+                "Unable to update classroom"
+            );
+
+        } finally {
+
+            setEditLoading(false);
+
+        }
+    };
+
+
+    // =====================================================
+    // OPEN DELETE MODAL
+    // =====================================================
+
+    const openDeleteModal = (event, classroom) => {
+
+        // Prevent classroom card click
+        event.stopPropagation();
+
+        setDeletingClassroom(classroom);
+
+        setDeleteError("");
+
+        setShowDeleteModal(true);
+    };
+
+
+    // =====================================================
+    // DELETE CLASSROOM
+    // =====================================================
+
+    const handleDeleteClassroom = async () => {
+
+        if (!deletingClassroom) {
+            return;
+        }
+
+
+        try {
+
+            setDeleteLoading(true);
+
+            setDeleteError("");
+
+            const token = localStorage.getItem("token");
+
+            await axios.delete(
+                `http://localhost:5000/api/classrooms/${deletingClassroom.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+
+            // Remove classroom from frontend
+            setClassrooms((previous) =>
+                previous.filter(
+                    (classroom) =>
+                        classroom._id !==
+                        deletingClassroom._id
+                )
+            );
+
+
+            // Close modal
+            setShowDeleteModal(false);
+
+            setDeletingClassroom(null);
+
+        } catch (error) {
+
+            console.error(error);
+
+            setDeleteError(
+                error.response?.data?.message ||
+                "Unable to delete classroom"
+            );
+
+        } finally {
+
+            setDeleteLoading(false);
+
+        }
+    };
+
+
+    // =====================================================
+    // CLOSE CREATE MODAL
+    // =====================================================
 
     const closeCreateModal = () => {
 
@@ -194,11 +393,56 @@ function Dashboard() {
             name: "",
             description: ""
         });
-
     };
 
 
+    // =====================================================
+    // CLOSE EDIT MODAL
+    // =====================================================
+
+    const closeEditModal = () => {
+
+        if (editLoading) {
+            return;
+        }
+
+        setShowEditModal(false);
+
+        setEditingClassroom(null);
+
+        setEditError("");
+
+        setClassroomForm({
+            name: "",
+            description: ""
+        });
+    };
+
+
+    // =====================================================
+    // CLOSE DELETE MODAL
+    // =====================================================
+
+    const closeDeleteModal = () => {
+
+        if (deleteLoading) {
+            return;
+        }
+
+        setShowDeleteModal(false);
+
+        setDeletingClassroom(null);
+
+        setDeleteError("");
+    };
+
+
+    // =====================================================
+    // JSX
+    // =====================================================
+
     return (
+
         <div className="dashboard-layout">
 
             <Sidebar />
@@ -212,7 +456,9 @@ function Dashboard() {
                 <section className="dashboard-content">
 
 
-                    {/* ================= WELCOME ================= */}
+                    {/* =================================================
+                        WELCOME
+                    ================================================= */}
 
                     <div className="welcome-section">
 
@@ -223,10 +469,12 @@ function Dashboard() {
                             </h1>
 
                             <p>
+
                                 {isTeacher
                                     ? "Manage your classrooms, classwork and students."
                                     : "Continue learning from your classrooms."
                                 }
+
                             </p>
 
                         </div>
@@ -234,7 +482,9 @@ function Dashboard() {
                     </div>
 
 
-                    {/* ================= CLASSROOM HEADER ================= */}
+                    {/* =================================================
+                        CLASSROOM HEADER
+                    ================================================= */}
 
                     <div className="classroom-header">
 
@@ -245,16 +495,18 @@ function Dashboard() {
                             </h2>
 
                             <p>
+
                                 {isTeacher
                                     ? "Create and manage the classrooms you teach."
                                     : "Access your classes, classwork and resources."
                                 }
+
                             </p>
 
                         </div>
 
 
-                        {/* Teacher-only button */}
+                        {/* Teacher only */}
 
                         {isTeacher && (
 
@@ -264,8 +516,13 @@ function Dashboard() {
                                     setShowCreateModal(true)
                                 }
                             >
-                                <span>+</span>
+
+                                <span>
+                                    +
+                                </span>
+
                                 Create Classroom
+
                             </button>
 
                         )}
@@ -273,7 +530,9 @@ function Dashboard() {
                     </div>
 
 
-                    {/* ================= LOADING ================= */}
+                    {/* =================================================
+                        LOADING
+                    ================================================= */}
 
                     {loading && (
 
@@ -286,7 +545,9 @@ function Dashboard() {
                     )}
 
 
-                    {/* ================= ERROR ================= */}
+                    {/* =================================================
+                        ERROR
+                    ================================================= */}
 
                     {error && (
 
@@ -299,7 +560,9 @@ function Dashboard() {
                     )}
 
 
-                    {/* ================= EMPTY STATE ================= */}
+                    {/* =================================================
+                        EMPTY STATE
+                    ================================================= */}
 
                     {!loading &&
                         !error &&
@@ -308,16 +571,15 @@ function Dashboard() {
                             <div className="empty-state">
 
                                 <div className="empty-icon">
+
                                     {isTeacher ? "+" : ""}
+
                                 </div>
 
 
                                 <h3>
 
-                                    {isTeacher
-                                        ? "No classrooms yet"
-                                        : "No classrooms yet"
-                                    }
+                                    No classrooms yet
 
                                 </h3>
 
@@ -340,7 +602,9 @@ function Dashboard() {
                                             setShowCreateModal(true)
                                         }
                                     >
+
                                         Create Classroom
+
                                     </button>
 
                                 )}
@@ -351,7 +615,9 @@ function Dashboard() {
                     }
 
 
-                    {/* ================= CLASSROOM GRID ================= */}
+                    {/* =================================================
+                        CLASSROOM GRID
+                    ================================================= */}
 
                     {!loading &&
                         !error &&
@@ -392,15 +658,72 @@ function Dashboard() {
 
                                         <div className="classroom-info">
 
-                                            <h3>
-                                                {classroom.name}
-                                            </h3>
 
+                                            {/* Title + Actions */}
+
+                                            <div className="classroom-title-row">
+
+                                                <h3>
+
+                                                    {classroom.name}
+
+                                                </h3>
+
+
+                                                {isTeacher && (
+
+                                                    <div className="classroom-actions">
+
+
+                                                        {/* EDIT */}
+
+                                                        <button
+                                                            className="edit-classroom-button"
+                                                            onClick={(event) =>
+                                                                openEditModal(
+                                                                    event,
+                                                                    classroom
+                                                                )
+                                                            }
+                                                        >
+
+                                                            Edit
+
+                                                        </button>
+
+
+                                                        {/* DELETE */}
+
+                                                        <button
+                                                            className="delete-classroom-button"
+                                                            onClick={(event) =>
+                                                                openDeleteModal(
+                                                                    event,
+                                                                    classroom
+                                                                )
+                                                            }
+                                                        >
+
+                                                            Delete
+
+                                                        </button>
+
+
+                                                    </div>
+
+                                                )}
+
+                                            </div>
+
+
+                                            {/* Description */}
 
                                             <p>
+
                                                 {classroom.description ||
                                                     "No description available."
                                                 }
+
                                             </p>
 
 
@@ -423,20 +746,28 @@ function Dashboard() {
                                             )}
 
 
+                                            {/* Footer */}
+
                                             <div className="classroom-footer">
 
                                                 <span>
+
                                                     {isTeacher
                                                         ? "Manage classroom"
                                                         : "Open classroom"
                                                     }
+
                                                 </span>
 
+
                                                 <span className="arrow">
+
                                                     →
+
                                                 </span>
 
                                             </div>
+
 
                                         </div>
 
@@ -449,12 +780,17 @@ function Dashboard() {
                         )
                     }
 
+
                 </section>
 
             </main>
 
 
-            {/* ================= CREATE CLASSROOM MODAL ================= */}
+            {/* =========================================================
+                CREATE CLASSROOM MODAL
+                IMPORTANT:
+                This is OUTSIDE classrooms.map()
+            ========================================================= */}
 
             {showCreateModal && (
 
@@ -490,7 +826,9 @@ function Dashboard() {
                                 onClick={closeCreateModal}
                                 disabled={createLoading}
                             >
+
                                 ×
+
                             </button>
 
                         </div>
@@ -500,15 +838,13 @@ function Dashboard() {
                             onSubmit={handleCreateClassroom}
                         >
 
-
                             <div className="modal-form-group">
 
-                                <label htmlFor="classroom-name">
+                                <label>
                                     Classroom Name
                                 </label>
 
                                 <input
-                                    id="classroom-name"
                                     name="name"
                                     type="text"
                                     placeholder="e.g. Data Structures"
@@ -523,12 +859,11 @@ function Dashboard() {
 
                             <div className="modal-form-group">
 
-                                <label htmlFor="classroom-description">
+                                <label>
                                     Description
                                 </label>
 
                                 <textarea
-                                    id="classroom-description"
                                     name="description"
                                     placeholder="Add a short description..."
                                     value={classroomForm.description}
@@ -559,7 +894,9 @@ function Dashboard() {
                                     onClick={closeCreateModal}
                                     disabled={createLoading}
                                 >
+
                                     Cancel
+
                                 </button>
 
 
@@ -586,9 +923,246 @@ function Dashboard() {
 
             )}
 
+
+            {/* =========================================================
+                EDIT CLASSROOM MODAL
+                IMPORTANT:
+                This is OUTSIDE classrooms.map()
+            ========================================================= */}
+
+            {showEditModal && (
+
+                <div
+                    className="modal-overlay"
+                    onMouseDown={closeEditModal}
+                >
+
+                    <div
+                        className="create-classroom-modal"
+                        onMouseDown={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
+                        <div className="modal-header">
+
+                            <div>
+
+                                <h2>
+                                    Edit Classroom
+                                </h2>
+
+                                <p>
+                                    Update your classroom information.
+                                </p>
+
+                            </div>
+
+
+                            <button
+                                className="modal-close"
+                                onClick={closeEditModal}
+                                disabled={editLoading}
+                            >
+
+                                ×
+
+                            </button>
+
+                        </div>
+
+
+                        <form
+                            onSubmit={handleEditClassroom}
+                        >
+
+                            <div className="modal-form-group">
+
+                                <label>
+                                    Classroom Name
+                                </label>
+
+                                <input
+                                    name="name"
+                                    type="text"
+                                    value={classroomForm.name}
+                                    onChange={handleChange}
+                                    disabled={editLoading}
+                                    autoFocus
+                                />
+
+                            </div>
+
+
+                            <div className="modal-form-group">
+
+                                <label>
+                                    Description
+                                </label>
+
+                                <textarea
+                                    name="description"
+                                    value={classroomForm.description}
+                                    onChange={handleChange}
+                                    disabled={editLoading}
+                                    rows="4"
+                                />
+
+                            </div>
+
+
+                            {editError && (
+
+                                <div className="modal-error">
+
+                                    {editError}
+
+                                </div>
+
+                            )}
+
+
+                            <div className="modal-actions">
+
+                                <button
+                                    type="button"
+                                    className="cancel-button"
+                                    onClick={closeEditModal}
+                                    disabled={editLoading}
+                                >
+
+                                    Cancel
+
+                                </button>
+
+
+                                <button
+                                    type="submit"
+                                    className="submit-create-button"
+                                    disabled={editLoading}
+                                >
+
+                                    {editLoading
+                                        ? "Saving..."
+                                        : "Save Changes"
+                                    }
+
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </div>
+
+                </div>
+
+            )}
+
+
+            {/* =========================================================
+                DELETE CLASSROOM MODAL
+                IMPORTANT:
+                THIS IS OUTSIDE classrooms.map()
+                So only ONE modal exists.
+            ========================================================= */}
+
+            {showDeleteModal && (
+
+                <div
+                    className="modal-overlay"
+                    onMouseDown={closeDeleteModal}
+                >
+
+                    <div
+                        className="delete-classroom-modal"
+                        onMouseDown={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
+                        <div className="delete-icon">
+
+                            !
+
+                        </div>
+
+
+                        <h2>
+
+                            Delete Classroom?
+
+                        </h2>
+
+
+                        <p>
+
+                            Are you sure you want to delete{" "}
+
+                            <strong>
+                                {deletingClassroom?.name}
+                            </strong>
+
+                            ?
+
+                            <br />
+
+                            This action cannot be undone.
+
+                        </p>
+
+
+                        {deleteError && (
+
+                            <div className="modal-error">
+
+                                {deleteError}
+
+                            </div>
+
+                        )}
+
+
+                        <div className="delete-modal-actions">
+
+
+                            <button
+                                type="button"
+                                className="cancel-button"
+                                onClick={closeDeleteModal}
+                                disabled={deleteLoading}
+                            >
+
+                                Cancel
+
+                            </button>
+
+
+                            <button
+                                type="button"
+                                className="confirm-delete-button"
+                                onClick={handleDeleteClassroom}
+                                disabled={deleteLoading}
+                            >
+
+                                {deleteLoading
+                                    ? "Deleting..."
+                                    : "Delete Classroom"
+                                }
+
+                            </button>
+
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            )}
+
         </div>
     );
 }
 
 export default Dashboard;
-
