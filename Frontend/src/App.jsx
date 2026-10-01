@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Classrooms from "./pages/Classrooms";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ClassroomDetails from "./pages/ClassroomDetails";
+import Assignments from "./pages/Assignments";
 
 function App() {
     return (
@@ -59,6 +60,14 @@ function App() {
                     }
                 />
 
+                <Route
+                    path="/assignments"
+                    element={
+                        <ProtectedRoute>
+                            <Assignments />
+                        </ProtectedRoute>
+                    }
+                />
                 
             </Routes>
 

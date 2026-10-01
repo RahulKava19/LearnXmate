@@ -1,5 +1,4 @@
 const express = require("express");
-
 const router = express.Router();
 
 const authMiddleware = require("../middleware/authMiddleware");
@@ -9,6 +8,7 @@ const {
     createSubmission,
     getProjectSubmissions,
     getSubmission,
+    getMySubmission,
     addSubmissionAttachments,
     deleteSubmissionAttachment,
     deleteSubmission
@@ -25,7 +25,15 @@ router.post(
     createSubmission
 );
 
-// GET ALL SUBMISSIONS
+// GET MY SUBMISSION
+// IMPORTANT: keep this BEFORE /:submissionId
+router.get(
+    "/:classroomId/projects/:projectId/submissions/mine",
+    authMiddleware,
+    getMySubmission
+);
+
+// GET ALL SUBMISSIONS - TEACHER
 router.get(
     "/:classroomId/projects/:projectId/submissions",
     authMiddleware,
@@ -54,7 +62,7 @@ router.delete(
     deleteSubmissionAttachment
 );
 
-// DELETE SUBMISSION
+// UNSUBMIT / DELETE ENTIRE SUBMISSION
 router.delete(
     "/:classroomId/projects/:projectId/submissions/:submissionId",
     authMiddleware,
