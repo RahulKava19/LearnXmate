@@ -10,22 +10,40 @@ function ClassroomDetails() {
     const [classroom, setClassroom] = useState(null);
     const [documents, setDocuments] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [students, setStudents] = useState([]);
+    const [instructor, setInstructor] = useState(null);
 
     const [activeTab, setActiveTab] = useState("stream");
 
     const [loading, setLoading] = useState(true);
     const [classworkLoading, setClassworkLoading] = useState(false);
+    const [peopleLoading, setPeopleLoading] = useState(false);
 
     const [error, setError] = useState("");
     const [classworkError, setClassworkError] = useState("");
+    const [peopleError, setPeopleError] = useState("");
 
-    // File viewer
     const [selectedFile, setSelectedFile] = useState(null);
 
+    // Submission states
+    const [submissions, setSubmissions] = useState({});
+    const [selectedSubmissionFiles, setSelectedSubmissionFiles] =
+        useState({});
+    const [submittingProject, setSubmittingProject] = useState(null);
+    const [submissionMessages, setSubmissionMessages] = useState({});
+    const [submissionErrors, setSubmissionErrors] = useState({});
+    const [unsubmittingProject, setUnsubmittingProject] =
+        useState(null);
 
-    // ---------------------------------------------
+    const user = JSON.parse(
+        localStorage.getItem("user") || "{}"
+    );
+
+    const isStudent = user.role === "student";
+
+    // =============================================
     // GET CLASSROOM
-    // ---------------------------------------------
+    // =============================================
 
     useEffect(() => {
         const fetchClassroom = async () => {
@@ -59,10 +77,9 @@ function ClassroomDetails() {
         fetchClassroom();
     }, [id]);
 
-
-    // ---------------------------------------------
+    // =============================================
     // GET DOCUMENTS + PROJECTS
-    // ---------------------------------------------
+    // =============================================
 
     const fetchClasswork = async () => {
         try {
@@ -71,29 +88,41 @@ function ClassroomDetails() {
 
             const token = localStorage.getItem("token");
 
-            const [documentsResponse, projectsResponse] =
-                await Promise.all([
-                    axios.get(
-                        `http://localhost:5000/api/classrooms/${id}/documents`,
-                        {
-                            headers: {
-                                Authorization: `Bearer ${token}`
-                            }
+            const [
+                documentsResponse,
+                projectsResponse
+            ] = await Promise.all([
+                axios.get(
+                    `http://localhost:5000/api/classrooms/${id}/documents`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`
                         }
-                    ),
+                    }
+                ),
 
-                    axios.get(
-                        `http://localhost:5000/api/classrooms/${id}/projects`,
-                        {
-                            headers: {
-                                Authorization: `Bearer ${token}`
-                            }
+                axios.get(
+                    `http://localhost:5000/api/classrooms/${id}/projects`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`
                         }
-                    )
-                ]);
+                    }
+                )
+            ]);
 
             setDocuments(documentsResponse.data);
             setProjects(projectsResponse.data);
+
+            // If student, check which projects are already turned in
+            if (
+                isStudent &&
+                projectsResponse.data.length > 0
+            ) {
+                await fetchExistingSubmissions(
+                    projectsResponse.data
+                );
+            }
 
         } catch (error) {
             console.error(error);
@@ -108,25 +137,124 @@ function ClassroomDetails() {
         }
     };
 
+    // =============================================
+    // GET MY SUBMISSIONS
+    // =============================================
 
-    // ---------------------------------------------
+    const fetchExistingSubmissions = async (projectList) => {
+        const token = localStorage.getItem("token");
+
+        const submissionResults = {};
+
+        await Promise.all(
+            projectList.map(async (project) => {
+                try {
+                    const response = await axios.get(
+                        `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/mine`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${token}`
+                            }
+                        }
+                    );
+
+                    submissionResults[project.id] =
+                        response.data;
+
+                } catch (error) {
+                    // 404 means the student has not
+                    // turned in this project.
+                    if (
+                        error.response?.status !== 404
+                    ) {
+                        console.error(
+                            "Unable to check submission:",
+                            error
+                        );
+                    }
+                }
+            })
+        );
+
+        setSubmissions(submissionResults);
+    };
+
+    // =============================================
+    // GET PEOPLE
+    // =============================================
+
+    const fetchPeople = async () => {
+        try {
+            setPeopleLoading(true);
+            setPeopleError("");
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.get(
+                `http://localhost:5000/api/classrooms/${id}/students`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setStudents(
+                response.data.students || []
+            );
+
+            setInstructor(
+                response.data.instructor || null
+            );
+
+        } catch (error) {
+            console.error(error);
+
+            setPeopleError(
+                error.response?.data?.message ||
+                "Unable to load people"
+            );
+
+        } finally {
+            setPeopleLoading(false);
+        }
+    };
+
+    // =============================================
     // LOAD CLASSWORK
-    // ---------------------------------------------
+    // =============================================
 
     useEffect(() => {
-        if (activeTab === "classwork" && classroom) {
+        if (
+            activeTab === "classwork" &&
+            classroom
+        ) {
             fetchClasswork();
         }
     }, [activeTab, classroom, id]);
 
+    // =============================================
+    // LOAD PEOPLE
+    // =============================================
 
-    // ---------------------------------------------
+    useEffect(() => {
+        if (
+            activeTab === "people" &&
+            classroom
+        ) {
+            fetchPeople();
+        }
+    }, [activeTab, classroom, id]);
+
+    // =============================================
     // OPEN FILE
-    // ---------------------------------------------
+    // =============================================
 
     const openFile = (attachment) => {
         const fileUrl =
-            `http://localhost:5000${attachment.fileUrl}`;
+            attachment.fileUrl?.startsWith("http")
+                ? attachment.fileUrl
+                : `http://localhost:5000${attachment.fileUrl}`;
 
         setSelectedFile({
             name: attachment.fileName,
@@ -135,19 +263,234 @@ function ClassroomDetails() {
         });
     };
 
-
-    // ---------------------------------------------
-    // CLOSE FILE VIEWER
-    // ---------------------------------------------
+    // =============================================
+    // CLOSE FILE
+    // =============================================
 
     const closeFile = () => {
         setSelectedFile(null);
     };
 
+    // =============================================
+    // SELECT FILES
+    // =============================================
 
-    // ---------------------------------------------
+    const handleSubmissionFileChange = (
+        projectId,
+        files
+    ) => {
+        setSelectedSubmissionFiles(
+            (previous) => ({
+                ...previous,
+                [projectId]: Array.from(files)
+            })
+        );
+
+        setSubmissionErrors(
+            (previous) => ({
+                ...previous,
+                [projectId]: ""
+            })
+        );
+
+        setSubmissionMessages(
+            (previous) => ({
+                ...previous,
+                [projectId]: ""
+            })
+        );
+    };
+
+    // =============================================
+    // TURN IN ASSIGNMENT
+    // =============================================
+
+    const submitAssignment = async (project) => {
+        const files =
+            selectedSubmissionFiles[project.id] || [];
+
+        if (files.length === 0) {
+            setSubmissionErrors(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        "Please select at least one file."
+                })
+            );
+
+            return;
+        }
+
+        if (files.length > 10) {
+            setSubmissionErrors(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        "You can submit maximum 10 files."
+                })
+            );
+
+            return;
+        }
+
+        try {
+            setSubmittingProject(project.id);
+
+            setSubmissionErrors(
+                (previous) => ({
+                    ...previous,
+                    [project.id]: ""
+                })
+            );
+
+            const token =
+                localStorage.getItem("token");
+
+            const formData = new FormData();
+
+            files.forEach((file) => {
+                formData.append(
+                    "attachments",
+                    file
+                );
+            });
+
+            const response = await axios.post(
+                `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions`,
+                formData,
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${token}`
+                    }
+                }
+            );
+
+            // Mark project as turned in
+            setSubmissions(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        response.data
+                })
+            );
+
+            // Clear selected files
+            setSelectedSubmissionFiles(
+                (previous) => ({
+                    ...previous,
+                    [project.id]: []
+                })
+            );
+
+            setSubmissionMessages(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        "Assignment turned in successfully."
+                })
+            );
+
+        } catch (error) {
+            console.error(error);
+
+            setSubmissionErrors(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        error.response?.data?.message ||
+                        "Unable to turn in assignment."
+                })
+            );
+
+        } finally {
+            setSubmittingProject(null);
+        }
+    };
+
+    // =============================================
+    // UNSUBMIT ASSIGNMENT
+    // =============================================
+
+    const unsubmitAssignment = async (project) => {
+        const submission =
+            submissions[project.id];
+
+        if (!submission) {
+            return;
+        }
+
+        try {
+            setUnsubmittingProject(project.id);
+
+            setSubmissionErrors(
+                (previous) => ({
+                    ...previous,
+                    [project.id]: ""
+                })
+            );
+
+            setSubmissionMessages(
+                (previous) => ({
+                    ...previous,
+                    [project.id]: ""
+                })
+            );
+
+            const token =
+                localStorage.getItem("token");
+
+            await axios.delete(
+                `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/${submission.id}`,
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${token}`
+                    }
+                }
+            );
+
+            // Remove submission from frontend state
+            setSubmissions(
+                (previous) => {
+                    const updated = {
+                        ...previous
+                    };
+
+                    delete updated[project.id];
+
+                    return updated;
+                }
+            );
+
+            setSubmissionMessages(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        "Assignment unsubmitted. You can submit it again."
+                })
+            );
+
+        } catch (error) {
+            console.error(error);
+
+            setSubmissionErrors(
+                (previous) => ({
+                    ...previous,
+                    [project.id]:
+                        error.response?.data?.message ||
+                        "Unable to unsubmit assignment."
+                })
+            );
+
+        } finally {
+            setUnsubmittingProject(null);
+        }
+    };
+
+    // =============================================
     // LOADING
-    // ---------------------------------------------
+    // =============================================
 
     if (loading) {
         return (
@@ -157,10 +500,9 @@ function ClassroomDetails() {
         );
     }
 
-
-    // ---------------------------------------------
+    // =============================================
     // ERROR
-    // ---------------------------------------------
+    // =============================================
 
     if (error) {
         return (
@@ -170,7 +512,6 @@ function ClassroomDetails() {
         );
     }
 
-
     if (!classroom) {
         return (
             <div className="page-error">
@@ -179,7 +520,6 @@ function ClassroomDetails() {
         );
     }
 
-
     return (
         <div className="classroom-layout">
 
@@ -187,7 +527,9 @@ function ClassroomDetails() {
 
             <main className="classroom-main">
 
+                {/* ================================= */}
                 {/* CLASSROOM HEADER */}
+                {/* ================================= */}
 
                 <section className="classroom-header">
 
@@ -221,8 +563,9 @@ function ClassroomDetails() {
 
                 </section>
 
-
+                {/* ================================= */}
                 {/* TABS */}
+                {/* ================================= */}
 
                 <nav className="classroom-tabs">
 
@@ -267,11 +610,11 @@ function ClassroomDetails() {
 
                 </nav>
 
-
+                {/* ================================= */}
                 {/* CONTENT */}
+                {/* ================================= */}
 
                 <section className="classroom-content">
-
 
                     {/* ================================= */}
                     {/* STREAM */}
@@ -281,7 +624,9 @@ function ClassroomDetails() {
 
                         <div className="tab-content">
 
-                            <h2>Stream</h2>
+                            <h2>
+                                Stream
+                            </h2>
 
                             <p className="tab-description">
                                 Announcements and recent
@@ -304,7 +649,6 @@ function ClassroomDetails() {
 
                     )}
 
-
                     {/* ================================= */}
                     {/* CLASSWORK */}
                     {/* ================================= */}
@@ -313,12 +657,13 @@ function ClassroomDetails() {
 
                         <div className="tab-content">
 
-                            <h2>Classwork</h2>
+                            <h2>
+                                Classwork
+                            </h2>
 
                             <p className="tab-description">
                                 Documents and projects for this classroom.
                             </p>
-
 
                             {classworkLoading && (
                                 <div className="content-placeholder">
@@ -326,18 +671,15 @@ function ClassroomDetails() {
                                 </div>
                             )}
 
-
                             {classworkError && (
                                 <div className="classroom-error">
                                     {classworkError}
                                 </div>
                             )}
 
-
                             {!classworkLoading &&
                                 !classworkError && (
                                     <>
-
 
                                         {/* ================================= */}
                                         {/* DOCUMENTS */}
@@ -352,7 +694,6 @@ function ClassroomDetails() {
                                                 </h3>
 
                                             </div>
-
 
                                             {documents.length === 0 ? (
 
@@ -383,9 +724,6 @@ function ClassroomDetails() {
                                                                             "No description available."}
                                                                     </p>
 
-
-                                                                    {/* ATTACHMENTS */}
-
                                                                     {document.attachments &&
                                                                         document.attachments.length > 0 && (
 
@@ -409,16 +747,6 @@ function ClassroomDetails() {
                                                                                                         attachment
                                                                                                     )
                                                                                                 }
-                                                                                                onKeyDown={(e) => {
-                                                                                                    if (
-                                                                                                        e.key ===
-                                                                                                        "Enter"
-                                                                                                    ) {
-                                                                                                        openFile(
-                                                                                                            attachment
-                                                                                                        );
-                                                                                                    }
-                                                                                                }}
                                                                                             >
 
                                                                                                 {attachment.fileType?.startsWith(
@@ -454,7 +782,6 @@ function ClassroomDetails() {
 
                                         </div>
 
-
                                         {/* ================================= */}
                                         {/* PROJECTS */}
                                         {/* ================================= */}
@@ -469,7 +796,6 @@ function ClassroomDetails() {
 
                                             </div>
 
-
                                             {projects.length === 0 ? (
 
                                                 <div className="content-placeholder">
@@ -481,38 +807,282 @@ function ClassroomDetails() {
                                                 <div className="classwork-list">
 
                                                     {projects.map(
-                                                        (project) => (
+                                                        (project) => {
 
-                                                            <div
-                                                                className="classwork-item"
-                                                                key={project._id}
-                                                            >
+                                                            const submission =
+                                                                submissions[
+                                                                    project.id
+                                                                ];
 
-                                                                <div>
+                                                            const selectedFiles =
+                                                                selectedSubmissionFiles[
+                                                                    project.id
+                                                                ] || [];
 
-                                                                    <h4>
-                                                                        {project.title}
-                                                                    </h4>
+                                                            const projectError =
+                                                                submissionErrors[
+                                                                    project.id
+                                                                ];
 
-                                                                    <p>
-                                                                        {project.description ||
-                                                                            "No description available."}
-                                                                    </p>
+                                                            const projectMessage =
+                                                                submissionMessages[
+                                                                    project.id
+                                                                ];
 
-                                                                    {project.dueDate && (
-                                                                        <span>
-                                                                            Due:{" "}
-                                                                            {new Date(
-                                                                                project.dueDate
-                                                                            ).toLocaleDateString()}
-                                                                        </span>
-                                                                    )}
+                                                            return (
+                                                                <div
+                                                                    className="classwork-item"
+                                                                    key={project._id}
+                                                                >
+
+                                                                    <div>
+
+                                                                        <h4>
+                                                                            {project.title}
+                                                                        </h4>
+
+                                                                        <p>
+                                                                            {project.description ||
+                                                                                "No description available."}
+                                                                        </p>
+
+                                                                        {project.dueDate && (
+                                                                            <span>
+                                                                                Due:{" "}
+                                                                                {new Date(
+                                                                                    project.dueDate
+                                                                                ).toLocaleDateString()}
+                                                                            </span>
+                                                                        )}
+
+                                                                        {/* PROJECT ATTACHMENTS */}
+
+                                                                        {project.attachments &&
+                                                                            project.attachments.length > 0 && (
+
+                                                                                <div className="document-attachments">
+
+                                                                                    {project.attachments.map(
+                                                                                        (attachment) => (
+
+                                                                                            <div
+                                                                                                className="document-attachment"
+                                                                                                key={
+                                                                                                    attachment._id
+                                                                                                }
+                                                                                            >
+
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    className="attachment-button"
+                                                                                                    onClick={() =>
+                                                                                                        openFile(
+                                                                                                            attachment
+                                                                                                        )
+                                                                                                    }
+                                                                                                >
+
+                                                                                                    {attachment.fileType?.startsWith(
+                                                                                                        "image/"
+                                                                                                    )
+                                                                                                        ? "View Image"
+                                                                                                        : attachment.fileType ===
+                                                                                                          "application/pdf"
+                                                                                                        ? "View PDF"
+                                                                                                        : `Open ${attachment.fileName}`}
+
+                                                                                                </button>
+
+                                                                                            </div>
+
+                                                                                        )
+                                                                                    )}
+
+                                                                                </div>
+
+                                                                            )}
+
+                                                                        {/* ================================= */}
+                                                                        {/* STUDENT SUBMISSION */}
+                                                                        {/* ================================= */}
+
+                                                                        {isStudent && (
+
+                                                                            <div className="submission-section">
+
+                                                                                {!submission ? (
+
+                                                                                    // ---------------------------------
+                                                                                    // NOT TURNED IN
+                                                                                    // ---------------------------------
+
+                                                                                    <>
+
+                                                                                        <div className="submission-status">
+                                                                                            Not turned in
+                                                                                        </div>
+
+                                                                                        <h5>
+                                                                                            Submit Assignment
+                                                                                        </h5>
+
+                                                                                        <input
+                                                                                            type="file"
+                                                                                            multiple
+                                                                                            onChange={(e) =>
+                                                                                                handleSubmissionFileChange(
+                                                                                                    project.id,
+                                                                                                    e.target.files
+                                                                                                )
+                                                                                            }
+                                                                                        />
+
+                                                                                        {selectedFiles.length > 0 && (
+
+                                                                                            <div className="selected-files">
+
+                                                                                                <p>
+                                                                                                    Selected files:
+                                                                                                </p>
+
+                                                                                                {selectedFiles.map(
+                                                                                                    (
+                                                                                                        file,
+                                                                                                        index
+                                                                                                    ) => (
+
+                                                                                                        <div
+                                                                                                            key={`${file.name}-${index}`}
+                                                                                                        >
+                                                                                                            {file.name}
+                                                                                                        </div>
+
+                                                                                                    )
+                                                                                                )}
+
+                                                                                            </div>
+
+                                                                                        )}
+
+                                                                                        {projectError && (
+                                                                                            <p className="classroom-error">
+                                                                                                {projectError}
+                                                                                            </p>
+                                                                                        )}
+
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="attachment-button"
+                                                                                            disabled={
+                                                                                                submittingProject ===
+                                                                                                project.id
+                                                                                            }
+                                                                                            onClick={() =>
+                                                                                                submitAssignment(
+                                                                                                    project
+                                                                                                )
+                                                                                            }
+                                                                                        >
+
+                                                                                            {submittingProject ===
+                                                                                            project.id
+                                                                                                ? "Turning in..."
+                                                                                                : "Turn In"}
+
+                                                                                        </button>
+
+                                                                                        {projectMessage && (
+                                                                                            <p>
+                                                                                                {projectMessage}
+                                                                                            </p>
+                                                                                        )}
+
+                                                                                    </>
+
+                                                                                ) : (
+
+                                                                                    // ---------------------------------
+                                                                                    // TURNED IN
+                                                                                    // ---------------------------------
+
+                                                                                    <div className="submitted-assignment">
+
+                                                                                        <div className="submission-status submitted">
+                                                                                            Turned in
+                                                                                        </div>
+
+                                                                                        <h5>
+                                                                                            Submitted Files
+                                                                                        </h5>
+
+                                                                                        {submission.attachments &&
+                                                                                            submission.attachments.map(
+                                                                                                (attachment) => (
+
+                                                                                                    <div
+                                                                                                        className="submission-file"
+                                                                                                        key={
+                                                                                                            attachment._id
+                                                                                                        }
+                                                                                                    >
+
+                                                                                                        <button
+                                                                                                            type="button"
+                                                                                                            className="attachment-button"
+                                                                                                            onClick={() =>
+                                                                                                                openFile(
+                                                                                                                    attachment
+                                                                                                                )
+                                                                                                            }
+                                                                                                        >
+                                                                                                            {attachment.fileName}
+                                                                                                        </button>
+
+                                                                                                    </div>
+
+                                                                                                )
+                                                                                            )}
+
+                                                                                        {projectError && (
+                                                                                            <p className="classroom-error">
+                                                                                                {projectError}
+                                                                                            </p>
+                                                                                        )}
+
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="attachment-button"
+                                                                                            disabled={
+                                                                                                unsubmittingProject ===
+                                                                                                project.id
+                                                                                            }
+                                                                                            onClick={() =>
+                                                                                                unsubmitAssignment(
+                                                                                                    project
+                                                                                                )
+                                                                                            }
+                                                                                        >
+
+                                                                                            {unsubmittingProject ===
+                                                                                            project.id
+                                                                                                ? "Unsubmitting..."
+                                                                                                : "Unsubmit"}
+
+                                                                                        </button>
+
+                                                                                    </div>
+
+                                                                                )}
+
+                                                                            </div>
+
+                                                                        )}
+
+                                                                    </div>
 
                                                                 </div>
-
-                                                            </div>
-
-                                                        )
+                                                            );
+                                                        }
                                                     )}
 
                                                 </div>
@@ -528,7 +1098,6 @@ function ClassroomDetails() {
 
                     )}
 
-
                     {/* ================================= */}
                     {/* PEOPLE */}
                     {/* ================================= */}
@@ -537,24 +1106,116 @@ function ClassroomDetails() {
 
                         <div className="tab-content">
 
-                            <h2>People</h2>
+                            <h2>
+                                People
+                            </h2>
 
                             <p className="tab-description">
                                 Instructor and students in this classroom.
                             </p>
 
-                            <div className="empty-classroom-content">
+                            {peopleLoading && (
+                                <div className="content-placeholder">
+                                    Loading people...
+                                </div>
+                            )}
 
-                                <h3>
-                                    Classroom members
-                                </h3>
+                            {peopleError && (
+                                <div className="classroom-error">
+                                    {peopleError}
+                                </div>
+                            )}
 
-                                <p>
-                                    Student and instructor information
-                                    will appear here.
-                                </p>
+                            {!peopleLoading &&
+                                !peopleError && (
 
-                            </div>
+                                    <div className="people-list">
+
+                                        {instructor && (
+                                            <>
+
+                                                <h3 className="people-section-title">
+                                                    Instructor
+                                                </h3>
+
+                                                <div className="person-card">
+
+                                                    <div className="person-avatar">
+                                                        {instructor.name
+                                                            ?.charAt(0)
+                                                            .toUpperCase()}
+                                                    </div>
+
+                                                    <div className="person-info">
+
+                                                        <h3>
+                                                            {instructor.name}
+                                                        </h3>
+
+                                                        <p>
+                                                            {instructor.email}
+                                                        </p>
+
+                                                    </div>
+
+                                                </div>
+
+                                            </>
+                                        )}
+
+                                        <h3 className="people-section-title">
+                                            Students
+                                        </h3>
+
+                                        {students.length === 0 ? (
+
+                                            <div className="empty-classroom-content">
+
+                                                <p>
+                                                    No students have joined
+                                                    this classroom yet.
+                                                </p>
+
+                                            </div>
+
+                                        ) : (
+
+                                            students.map((item) => (
+
+                                                <div
+                                                    className="person-card"
+                                                    key={item._id}
+                                                >
+
+                                                    <div className="person-avatar">
+
+                                                        {item.student?.name
+                                                            ?.charAt(0)
+                                                            .toUpperCase()}
+
+                                                    </div>
+
+                                                    <div className="person-info">
+
+                                                        <h3>
+                                                            {item.student?.name}
+                                                        </h3>
+
+                                                        <p>
+                                                            {item.student?.email}
+                                                        </p>
+
+                                                    </div>
+
+                                                </div>
+
+                                            ))
+
+                                        )}
+
+                                    </div>
+
+                                )}
 
                         </div>
 
@@ -563,7 +1224,6 @@ function ClassroomDetails() {
                 </section>
 
             </main>
-
 
             {/* ================================= */}
             {/* FILE VIEWER */}
@@ -599,10 +1259,7 @@ function ClassroomDetails() {
 
                         </div>
 
-
                         <div className="file-viewer-content">
-
-                            {/* IMAGE */}
 
                             {selectedFile.type?.startsWith(
                                 "image/"
@@ -616,9 +1273,6 @@ function ClassroomDetails() {
 
                             )}
 
-
-                            {/* PDF */}
-
                             {selectedFile.type ===
                                 "application/pdf" && (
 
@@ -629,9 +1283,6 @@ function ClassroomDetails() {
                                 />
 
                             )}
-
-
-                            {/* OTHER FILE */}
 
                             {!selectedFile.type?.startsWith("image/") &&
                                 selectedFile.type !==

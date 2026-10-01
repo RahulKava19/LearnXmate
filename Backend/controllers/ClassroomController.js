@@ -327,21 +327,28 @@ const getClassroomStudents = async (req, res) => {
             });
         }
 
-        const students = await ClassroomStudent.find({
+        // Get instructor
+        const instructorLink = await ClassroomInstructor.findOne({
+            classroom: classroom._id
+        }).populate(
+            "instructor",
+            "name email"
+        );
+
+        // Get students
+        const studentLinks = await ClassroomStudent.find({
             classroom: classroom._id
         }).populate(
             "student",
-            "name email role"
+            "name email"
         );
 
         res.status(200).json({
-            classroom: {
-                id: classroom.id,
-                name: classroom.name,
-                description: classroom.description,
-                classCode: classroom.classCode
-            },
-            students
+            instructor: instructorLink
+                ? instructorLink.instructor
+                : null,
+
+            students: studentLinks
         });
 
     } catch (error) {
