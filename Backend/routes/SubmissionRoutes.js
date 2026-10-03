@@ -1,72 +1,113 @@
 const express = require("express");
+
 const router = express.Router();
 
 const authMiddleware = require("../middleware/authMiddleware");
+
 const createUploadMiddleware = require("../middleware/uploadMiddleware");
 
 const {
-    createSubmission,
-    getProjectSubmissions,
-    getSubmission,
-    getMySubmission,
-    addSubmissionAttachments,
-    deleteSubmissionAttachment,
-    deleteSubmission
+  createSubmission,
+  getProjectSubmissions,
+  getSubmission,
+  getMySubmission,
+  addSubmissionAttachments,
+  deleteSubmissionAttachment,
+  deleteSubmission,
+  submitDraft,
 } = require("../controllers/SubmissionController");
 
-const uploadSubmission =
-    createUploadMiddleware("submissions");
+const uploadSubmission = createUploadMiddleware("submissions");
 
+// =============================================
 // CREATE SUBMISSION
+// =============================================
+
 router.post(
-    "/:classroomId/projects/:projectId/submissions",
-    authMiddleware,
-    uploadSubmission.array("attachments", 10),
-    createSubmission
+  "/:classroomId/projects/:projectId/submissions",
+  authMiddleware,
+  uploadSubmission.array("attachments", 10),
+  createSubmission,
 );
 
+// =============================================
 // GET MY SUBMISSION
 // IMPORTANT: keep this BEFORE /:submissionId
+// =============================================
+
 router.get(
-    "/:classroomId/projects/:projectId/submissions/mine",
-    authMiddleware,
-    getMySubmission
+  "/:classroomId/projects/:projectId/submissions/mine",
+  authMiddleware,
+  getMySubmission,
 );
 
+// =============================================
 // GET ALL SUBMISSIONS - TEACHER
+// =============================================
+
 router.get(
-    "/:classroomId/projects/:projectId/submissions",
-    authMiddleware,
-    getProjectSubmissions
+  "/:classroomId/projects/:projectId/submissions",
+  authMiddleware,
+  getProjectSubmissions,
 );
 
+// =============================================
 // GET ONE SUBMISSION
+// =============================================
+
 router.get(
-    "/:classroomId/projects/:projectId/submissions/:submissionId",
-    authMiddleware,
-    getSubmission
+  "/:classroomId/projects/:projectId/submissions/:submissionId",
+  authMiddleware,
+  getSubmission,
 );
 
+// =============================================
 // ADD SUBMISSION ATTACHMENTS
+// =============================================
+
 router.post(
-    "/:classroomId/projects/:projectId/submissions/:submissionId/attachments",
-    authMiddleware,
-    uploadSubmission.array("attachments", 10),
-    addSubmissionAttachments
+  "/:classroomId/projects/:projectId/submissions/:submissionId/attachments",
+  authMiddleware,
+  uploadSubmission.array("attachments", 10),
+  addSubmissionAttachments,
 );
 
+// =============================================
 // DELETE SUBMISSION ATTACHMENT
+// =============================================
+
 router.delete(
-    "/:classroomId/projects/:projectId/submissions/:submissionId/attachments/:attachmentId",
-    authMiddleware,
-    deleteSubmissionAttachment
+  "/:classroomId/projects/:projectId/submissions/:submissionId/attachments/:attachmentId",
+  authMiddleware,
+  deleteSubmissionAttachment,
 );
 
-// UNSUBMIT / DELETE ENTIRE SUBMISSION
+// =============================================
+// UNSUBMIT SUBMISSION
+// =============================================
+// submitted → draft
+//
+// Existing files are kept.
+// =============================================
+
 router.delete(
-    "/:classroomId/projects/:projectId/submissions/:submissionId",
-    authMiddleware,
-    deleteSubmission
+  "/:classroomId/projects/:projectId/submissions/:submissionId",
+  authMiddleware,
+  deleteSubmission,
+);
+
+// =============================================
+// TURN IN DRAFT SUBMISSION
+// =============================================
+// draft → submitted
+//
+// Requires at least one attachment.
+// =============================================
+
+router.put(
+  "/:classroomId/projects/:projectId/submissions/:submissionId/submit",
+  authMiddleware,
+  submitDraft,
 );
 
 module.exports = router;

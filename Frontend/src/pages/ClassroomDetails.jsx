@@ -69,6 +69,36 @@ function ClassroomDetails() {
     const [submissionErrors, setSubmissionErrors] = useState({});
     const [unsubmittingProject, setUnsubmittingProject] =
         useState(null);
+    const [addingSubmissionFiles, setAddingSubmissionFiles] =
+        useState(null);
+    const [deletingSubmissionAttachment, setDeletingSubmissionAttachment] =
+        useState(null);
+    const [submittingDraftProject, setSubmittingDraftProject] =
+        useState(null);
+
+    // Teacher document states
+    const [showDocumentForm, setShowDocumentForm] = useState(false);
+    const [documentForm, setDocumentForm] = useState({
+        title: "",
+        content: "",
+        topic: ""
+    });
+    const [documentFiles, setDocumentFiles] = useState([]);
+    const [creatingDocument, setCreatingDocument] = useState(false);
+    const [documentCreateError, setDocumentCreateError] = useState("");
+
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [updatingDocument, setUpdatingDocument] = useState(false);
+    const [documentUpdateError, setDocumentUpdateError] = useState("");
+
+    const [deletingDocument, setDeletingDocument] = useState(null);
+    const [documentDeleteLoading, setDocumentDeleteLoading] = useState(false);
+    const [documentDeleteError, setDocumentDeleteError] = useState("");
+
+    const [selectedDocumentFiles, setSelectedDocumentFiles] = useState({});
+    const [addingDocumentFiles, setAddingDocumentFiles] = useState(null);
+    const [deletingDocumentAttachment, setDeletingDocumentAttachment] =
+        useState(null);
 
     // Announcement states
     const [announcements, setAnnouncements] = useState([]);
@@ -462,6 +492,313 @@ function ClassroomDetails() {
             );
         } finally {
             setProjectDeleteLoading(false);
+        }
+    };
+
+    // =============================================
+    // DOCUMENT FORM CHANGE
+    // =============================================
+
+    const handleDocumentFormChange = (event) => {
+        const { name, value } = event.target;
+
+        setDocumentForm((previous) => ({
+            ...previous,
+            [name]: value
+        }));
+
+        setDocumentCreateError("");
+        setDocumentUpdateError("");
+    };
+
+    const handleDocumentFileChange = (event) => {
+        const files = Array.from(event.target.files || []);
+
+        if (files.length > 10) {
+            setDocumentCreateError(
+                "You can upload maximum 10 attachments."
+            );
+            setDocumentFiles(files.slice(0, 10));
+            return;
+        }
+
+        setDocumentFiles(files);
+        setDocumentCreateError("");
+    };
+
+    const createDocument = async (event) => {
+        event.preventDefault();
+        setDocumentCreateError("");
+
+        if (!documentForm.title.trim()) {
+            setDocumentCreateError("Document title is required.");
+            return;
+        }
+
+        try {
+            setCreatingDocument(true);
+
+            const token = localStorage.getItem("token");
+            const formData = new FormData();
+
+            formData.append("id", Date.now());
+            formData.append("title", documentForm.title.trim());
+            formData.append("content", documentForm.content.trim());
+            formData.append("topic", documentForm.topic.trim() || "No topic");
+
+            documentFiles.forEach((file) => {
+                formData.append("attachments", file);
+            });
+
+            const response = await axios.post(
+                `http://localhost:5000/api/classrooms/${id}/documents`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setDocuments((previous) => [
+                response.data,
+                ...previous
+            ]);
+
+            setDocumentForm({
+                title: "",
+                content: "",
+                topic: ""
+            });
+            setDocumentFiles([]);
+            setShowDocumentForm(false);
+
+            const fileInput = document.getElementById(
+                "document-attachments"
+            );
+
+            if (fileInput) {
+                fileInput.value = "";
+            }
+        } catch (error) {
+            console.error(error);
+
+            setDocumentCreateError(
+                error.response?.data?.message ||
+                "Unable to create document."
+            );
+        } finally {
+            setCreatingDocument(false);
+        }
+    };
+
+    const openEditDocument = (document) => {
+        setEditingDocument(document);
+        setDocumentForm({
+            title: document.title || "",
+            content: document.content || "",
+            topic: document.topic || "No topic"
+        });
+        setDocumentUpdateError("");
+    };
+
+    const updateDocument = async (event) => {
+        event.preventDefault();
+        setDocumentUpdateError("");
+
+        if (!documentForm.title.trim()) {
+            setDocumentUpdateError("Document title is required.");
+            return;
+        }
+
+        if (!editingDocument) {
+            return;
+        }
+
+        try {
+            setUpdatingDocument(true);
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.put(
+                `http://localhost:5000/api/classrooms/${id}/documents/${editingDocument.id}`,
+                {
+                    title: documentForm.title.trim(),
+                    content: documentForm.content.trim(),
+                    topic: documentForm.topic.trim() || "No topic"
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setDocuments((previous) =>
+                previous.map((document) =>
+                    document.id === editingDocument.id
+                        ? response.data
+                        : document
+                )
+            );
+
+            setEditingDocument(null);
+            setDocumentForm({
+                title: "",
+                content: "",
+                topic: ""
+            });
+        } catch (error) {
+            console.error(error);
+
+            setDocumentUpdateError(
+                error.response?.data?.message ||
+                "Unable to update document."
+            );
+        } finally {
+            setUpdatingDocument(false);
+        }
+    };
+
+    const handleDocumentAttachmentChange = (documentId, files) => {
+        const selectedFiles = Array.from(files || []);
+
+        setSelectedDocumentFiles((previous) => ({
+            ...previous,
+            [documentId]: selectedFiles
+        }));
+    };
+
+    const addDocumentAttachments = async (document) => {
+        const files = selectedDocumentFiles[document.id] || [];
+
+        if (files.length === 0) {
+            return;
+        }
+
+        if ((document.attachments?.length || 0) + files.length > 10) {
+            setDocumentCreateError(
+                "A document can have maximum 10 attachments."
+            );
+            return;
+        }
+
+        try {
+            setAddingDocumentFiles(document.id);
+            setDocumentCreateError("");
+
+            const token = localStorage.getItem("token");
+            const formData = new FormData();
+
+            files.forEach((file) => {
+                formData.append("attachments", file);
+            });
+
+            const response = await axios.post(
+                `http://localhost:5000/api/classrooms/${id}/documents/${document.id}/attachments`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setDocuments((previous) =>
+                previous.map((item) =>
+                    item.id === document.id
+                        ? response.data
+                        : item
+                )
+            );
+
+            setSelectedDocumentFiles((previous) => ({
+                ...previous,
+                [document.id]: []
+            }));
+        } catch (error) {
+            console.error(error);
+
+            setDocumentCreateError(
+                error.response?.data?.message ||
+                "Unable to add document attachments."
+            );
+        } finally {
+            setAddingDocumentFiles(null);
+        }
+    };
+
+    const handleDeleteDocumentAttachment = async (document, attachment) => {
+        try {
+            setDeletingDocumentAttachment(attachment._id);
+            setDocumentCreateError("");
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.delete(
+                `http://localhost:5000/api/classrooms/${id}/documents/${document.id}/attachments/${attachment._id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setDocuments((previous) =>
+                previous.map((item) =>
+                    item.id === document.id
+                        ? response.data.document
+                        : item
+                )
+            );
+        } catch (error) {
+            console.error(error);
+
+            setDocumentCreateError(
+                error.response?.data?.message ||
+                "Unable to delete attachment."
+            );
+        } finally {
+            setDeletingDocumentAttachment(null);
+        }
+    };
+
+    const handleDeleteDocument = async () => {
+        if (!deletingDocument) {
+            return;
+        }
+
+        try {
+            setDocumentDeleteLoading(true);
+            setDocumentDeleteError("");
+
+            const token = localStorage.getItem("token");
+
+            await axios.delete(
+                `http://localhost:5000/api/classrooms/${id}/documents/${deletingDocument.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setDocuments((previous) =>
+                previous.filter(
+                    (document) => document.id !== deletingDocument.id
+                )
+            );
+
+            setDeletingDocument(null);
+        } catch (error) {
+            console.error(error);
+
+            setDocumentDeleteError(
+                error.response?.data?.message ||
+                "Unable to delete document."
+            );
+        } finally {
+            setDocumentDeleteLoading(false);
         }
     };
 
@@ -1009,70 +1346,323 @@ function ClassroomDetails() {
         try {
             setUnsubmittingProject(project.id);
 
-            setSubmissionErrors(
-                (previous) => ({
-                    ...previous,
-                    [project.id]: ""
-                })
-            );
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]: ""
+            }));
 
-            setSubmissionMessages(
-                (previous) => ({
-                    ...previous,
-                    [project.id]: ""
-                })
-            );
+            setSubmissionMessages((previous) => ({
+                ...previous,
+                [project.id]: ""
+            }));
 
-            const token =
-                localStorage.getItem("token");
+            const token = localStorage.getItem("token");
 
-            await axios.delete(
+            const response = await axios.delete(
                 `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/${submission.id}`,
                 {
                     headers: {
-                        Authorization:
-                            `Bearer ${token}`
+                        Authorization: `Bearer ${token}`
                     }
                 }
             );
 
-            // Remove submission from frontend state
-            setSubmissions(
-                (previous) => {
-                    const updated = {
-                        ...previous
-                    };
+            // Keep the submission in state. The backend changes it
+            // to a draft and keeps all existing attachments.
+            setSubmissions((previous) => ({
+                ...previous,
+                [project.id]: response.data.submission
+            }));
 
-                    delete updated[project.id];
-
-                    return updated;
-                }
-            );
-
-            setSubmissionMessages(
-                (previous) => ({
-                    ...previous,
-                    [project.id]:
-                        "Assignment unsubmitted. You can submit it again."
-                })
-            );
-
+            setSubmissionMessages((previous) => ({
+                ...previous,
+                [project.id]:
+                    "Assignment unsubmitted. Your files are still here."
+            }));
         } catch (error) {
             console.error(error);
 
-            setSubmissionErrors(
-                (previous) => ({
-                    ...previous,
-                    [project.id]:
-                        error.response?.data?.message ||
-                        "Unable to unsubmit assignment."
-                })
-            );
-
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]:
+                    error.response?.data?.message ||
+                    "Unable to unsubmit assignment."
+            }));
         } finally {
             setUnsubmittingProject(null);
         }
     };
+
+    // =============================================
+    // ADD FILES TO DRAFT SUBMISSION
+    // =============================================
+
+    const addSubmissionAttachments = async (project) => {
+        const submission = submissions[project.id];
+        const files = selectedSubmissionFiles[project.id] || [];
+
+        if (!submission || submission.status !== "draft") {
+            return;
+        }
+
+        if (files.length === 0) {
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]: "Please select at least one file."
+            }));
+            return;
+        }
+
+        if ((submission.attachments?.length || 0) + files.length > 10) {
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]:
+                    "You can have maximum 10 files in one submission."
+            }));
+            return;
+        }
+
+        try {
+            setAddingSubmissionFiles(project.id);
+
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]: ""
+            }));
+
+            const token = localStorage.getItem("token");
+            const formData = new FormData();
+
+            files.forEach((file) => {
+                formData.append("attachments", file);
+            });
+
+            const response = await axios.post(
+                `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/${submission.id}/attachments`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setSubmissions((previous) => ({
+                ...previous,
+                [project.id]: response.data.submission
+            }));
+
+            setSelectedSubmissionFiles((previous) => ({
+                ...previous,
+                [project.id]: []
+            }));
+
+            setSubmissionMessages((previous) => ({
+                ...previous,
+                [project.id]: "Files added to your submission."
+            }));
+        } catch (error) {
+            console.error(error);
+
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]:
+                    error.response?.data?.message ||
+                    "Unable to add files."
+            }));
+        } finally {
+            setAddingSubmissionFiles(null);
+        }
+    };
+
+    // =============================================
+    // DELETE ONE SUBMISSION ATTACHMENT
+    // =============================================
+
+    const removeSubmissionAttachment = async (project, attachment) => {
+        let submission = submissions[project.id];
+
+        if (!submission || submission.status !== "draft") {
+            return;
+        }
+
+        try {
+            setDeletingSubmissionAttachment(attachment._id);
+
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]: ""
+            }));
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.delete(
+                `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/${submission.id}/attachments/${attachment._id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            // If the last file was removed, the backend deletes the
+            // empty draft and returns submission: null.
+            setSubmissions((previous) => {
+                const updated = { ...previous };
+
+                if (response.data.submission) {
+                    updated[project.id] = response.data.submission;
+                } else {
+                    delete updated[project.id];
+                }
+
+                return updated;
+            });
+
+            setSubmissionMessages((previous) => ({
+                ...previous,
+                [project.id]:
+                    response.data.message ||
+                    "Attachment removed."
+            }));
+        } catch (error) {
+            console.error(error);
+
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]:
+                    error.response?.data?.message ||
+                    "Unable to remove attachment."
+            }));
+        } finally {
+            setDeletingSubmissionAttachment(null);
+        }
+    };
+
+    // =============================================
+    // SUBMIT EXISTING DRAFT
+    // =============================================
+
+    const submitDraft = async (project) => {
+        const submission = submissions[project.id];
+
+        if (!submission || submission.status !== "draft") {
+            return;
+        }
+
+        const selectedFiles =
+            selectedSubmissionFiles[project.id] || [];
+
+        try {
+            setSubmittingDraftProject(project.id);
+
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]: ""
+            }));
+
+            // If the student selected extra files, upload them first.
+            if (selectedFiles.length > 0) {
+                if ((submission.attachments?.length || 0) + selectedFiles.length > 10) {
+                    throw new Error(
+                        "You can have maximum 10 files in one submission."
+                    );
+                }
+
+                const token = localStorage.getItem("token");
+                const formData = new FormData();
+
+                selectedFiles.forEach((file) => {
+                    formData.append("attachments", file);
+                });
+
+                const attachmentResponse = await axios.post(
+                    `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/${submission.id}/attachments`,
+                    formData,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    }
+                );
+
+                submission = attachmentResponse.data.submission;
+
+                setSubmissions((previous) => ({
+                    ...previous,
+                    [project.id]: submission
+                }));
+
+                setSelectedSubmissionFiles((previous) => ({
+                    ...previous,
+                    [project.id]: []
+                }));
+            }
+
+            if (!submission.attachments || submission.attachments.length === 0) {
+                setSubmissionErrors((previous) => ({
+                    ...previous,
+                    [project.id]:
+                        "Your submission must contain at least one file."
+                }));
+                return;
+            }
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.put(
+                `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions/${submission.id}/submit`,
+                {},
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setSubmissions((previous) => ({
+                ...previous,
+                [project.id]: response.data.submission
+            }));
+
+            setSubmissionMessages((previous) => ({
+                ...previous,
+                [project.id]: "Assignment turned in successfully."
+            }));
+        } catch (error) {
+            console.error(error);
+
+            setSubmissionErrors((previous) => ({
+                ...previous,
+                [project.id]:
+                    error.response?.data?.message ||
+                    error.message ||
+                    "Unable to turn in assignment."
+            }));
+        } finally {
+            setSubmittingDraftProject(null);
+        }
+    };
+
+    // =============================================
+    // GROUP DOCUMENTS BY TOPIC
+    // =============================================
+
+    const documentGroups = documents.reduce((groups, document) => {
+        const topic =
+            document.topic?.trim() ||
+            "No topic";
+
+        if (!groups[topic]) {
+            groups[topic] = [];
+        }
+
+        groups[topic].push(document);
+
+        return groups;
+    }, {});
+
+    const documentTopicNames = Object.keys(documentGroups);
 
     // =============================================
     // LOADING
@@ -1484,104 +2074,349 @@ function ClassroomDetails() {
                                         {/* DOCUMENTS */}
                                         {/* ================================= */}
 
-                                        <div className="content-section">
+                                        <div className="content-section documents-section">
 
-                                            <div className="section-header">
+                                            <div className="section-header documents-section-header">
+                                                <div>
+                                                    <h3>Documents</h3>
+                                                </div>
 
-                                                <h3>
-                                                    Documents
-                                                </h3>
-
+                                                {/* Keep the classroom document area clean once a document exists. */}
+                                                {!isStudent && (
+                                                    <button
+                                                        type="button"
+                                                        className="create-announcement-button"
+                                                        onClick={() => {
+                                                            setEditingDocument(null);
+                                                            setDocumentForm({
+                                                                title: "",
+                                                                content: "",
+                                                                topic: ""
+                                                            });
+                                                            setDocumentFiles([]);
+                                                            setDocumentCreateError("");
+                                                            setShowDocumentForm(true);
+                                                        }}
+                                                    >
+                                                        + Add Document
+                                                    </button>
+                                                )}
                                             </div>
 
-                                            {documents.length === 0 ? (
+                                            {!isStudent && showDocumentForm && (
+                                                <div className="announcement-form-card document-form-card">
 
+                                                    <div className="announcement-form-header">
+                                                        <div>
+                                                            <h3>Add Document</h3>
+                                                            <p>
+                                                                Add reference material and attach files for your students.
+                                                            </p>
+                                                        </div>
+
+                                                        <button
+                                                            type="button"
+                                                            className="announcement-close-button"
+                                                            onClick={() => {
+                                                                if (!creatingDocument) {
+                                                                    setShowDocumentForm(false);
+                                                                    setDocumentCreateError("");
+                                                                }
+                                                            }}
+                                                            disabled={creatingDocument}
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+
+                                                    <form onSubmit={createDocument}>
+                                                        <div className="announcement-form-group">
+                                                            <label>Title</label>
+                                                            <input
+                                                                type="text"
+                                                                name="title"
+                                                                placeholder="e.g. MHP Lecture Material"
+                                                                value={documentForm.title}
+                                                                onChange={handleDocumentFormChange}
+                                                                disabled={creatingDocument}
+                                                            />
+                                                        </div>
+
+                                                        <div className="announcement-form-group">
+                                                            <label>Topic / Section</label>
+                                                            <input
+                                                                type="text"
+                                                                name="topic"
+                                                                placeholder="e.g. Lectures, Practicals, Reference Material"
+                                                                value={documentForm.topic}
+                                                                onChange={handleDocumentFormChange}
+                                                                disabled={creatingDocument}
+                                                            />
+                                                        </div>
+
+                                                        <div className="announcement-form-group">
+                                                            <label>Description / Content</label>
+                                                            <textarea
+                                                                name="content"
+                                                                placeholder="Write a short description..."
+                                                                value={documentForm.content}
+                                                                onChange={handleDocumentFormChange}
+                                                                rows="4"
+                                                                disabled={creatingDocument}
+                                                            />
+                                                        </div>
+
+                                                        <div className="announcement-form-group">
+                                                            <label>Attachments</label>
+                                                            <input
+                                                                id="document-attachments"
+                                                                type="file"
+                                                                multiple
+                                                                onChange={handleDocumentFileChange}
+                                                                disabled={creatingDocument}
+                                                            />
+
+                                                            {documentFiles.length > 0 && (
+                                                                <div className="selected-files">
+                                                                    <p>Selected files:</p>
+                                                                    {documentFiles.map((file, index) => (
+                                                                        <div key={`${file.name}-${index}`}>
+                                                                            {file.name}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {documentCreateError && (
+                                                            <div className="announcement-form-error">
+                                                                {documentCreateError}
+                                                            </div>
+                                                        )}
+
+                                                        <div className="announcement-form-actions">
+                                                            <button
+                                                                type="button"
+                                                                className="announcement-cancel-button"
+                                                                onClick={() => {
+                                                                    setShowDocumentForm(false);
+                                                                    setDocumentCreateError("");
+                                                                }}
+                                                                disabled={creatingDocument}
+                                                            >
+                                                                Cancel
+                                                            </button>
+
+                                                            <button
+                                                                type="submit"
+                                                                className="announcement-submit-button"
+                                                                disabled={creatingDocument}
+                                                            >
+                                                                {creatingDocument ? "Creating..." : "Add Document"}
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            )}
+
+                                            {documents.length === 0 ? (
                                                 <div className="content-placeholder">
                                                     No documents in this classroom.
                                                 </div>
-
                                             ) : (
-
-                                                <div className="classwork-list">
-
-                                                    {documents.map(
-                                                        (document) => (
-
-                                                            <div
-                                                                className="classwork-item"
-                                                                key={document._id}
-                                                            >
-
+                                                <div className="document-topic-list">
+                                                    {documentTopicNames.map((topic) => (
+                                                        <section
+                                                            className="document-topic-section"
+                                                            key={topic}
+                                                        >
+                                                            <div className="document-topic-header">
                                                                 <div>
-
-                                                                    <h4>
-                                                                        {document.title}
-                                                                    </h4>
-
-                                                                    <p>
-                                                                        {document.content ||
-                                                                            "No description available."}
-                                                                    </p>
-
-                                                                    {document.attachments &&
-                                                                        document.attachments.length > 0 && (
-
-                                                                            <div className="document-attachments">
-
-                                                                                {document.attachments.map(
-                                                                                    (attachment) => (
-
-                                                                                        <div
-                                                                                            className="document-attachment"
-                                                                                            key={
-                                                                                                attachment._id
-                                                                                            }
-                                                                                        >
-
-                                                                                            <button
-                                                                                                type="button"
-                                                                                                className="attachment-button"
-                                                                                                onClick={() =>
-                                                                                                    openFile(
-                                                                                                        attachment
-                                                                                                    )
-                                                                                                }
-                                                                                            >
-
-                                                                                                {attachment.fileType?.startsWith(
-                                                                                                    "image/"
-                                                                                                )
-                                                                                                    ? "View Image"
-                                                                                                    : attachment.fileType ===
-                                                                                                      "application/pdf"
-                                                                                                    ? "View PDF"
-                                                                                                    : `Open ${attachment.fileName}`}
-
-                                                                                            </button>
-
-                                                                                        </div>
-
-                                                                                    )
-                                                                                )}
-
-                                                                            </div>
-
-                                                                        )}
-
+                                                                    <h4>{topic}</h4>
+                                                                    <span>
+                                                                        {documentGroups[topic].length}{" "}
+                                                                        {documentGroups[topic].length === 1
+                                                                            ? "material"
+                                                                            : "materials"}
+                                                                    </span>
                                                                 </div>
-
                                                             </div>
 
-                                                        )
-                                                    )}
+                                                            <div className="documents-list">
+                                                                {documentGroups[topic].map((document) => {
+                                                                    const selectedFiles =
+                                                                        selectedDocumentFiles[document.id] || [];
 
+                                                                    return (
+                                                                        <article
+                                                                            className="document-card"
+                                                                            key={document._id}
+                                                                        >
+                                                                            <div className="document-card-header">
+                                                                                <div className="document-card-title-wrap">
+                                                                                    <div className="document-icon" aria-hidden="true">
+                                                                                        <span>▣</span>
+                                                                                    </div>
+
+                                                                                    <div>
+                                                                                        <h4>{document.title}</h4>
+                                                                                        <span className="document-meta">
+                                                                                            {document.attachments?.length || 0}{" "}
+                                                                                            {document.attachments?.length === 1
+                                                                                                ? "attachment"
+                                                                                                : "attachments"}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                                {!isStudent && (
+                                                                                    <div className="document-card-actions">
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="project-edit-button"
+                                                                                            onClick={() => openEditDocument(document)}
+                                                                                        >
+                                                                                            Edit
+                                                                                        </button>
+
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="project-delete-button"
+                                                                                            onClick={() => {
+                                                                                                setDeletingDocument(document);
+                                                                                                setDocumentDeleteError("");
+                                                                                            }}
+                                                                                        >
+                                                                                            Delete
+                                                                                        </button>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+
+                                                                            {document.content && (
+                                                                                <p className="document-card-description">
+                                                                                    {document.content}
+                                                                                </p>
+                                                                            )}
+
+                                                                            {document.attachments && document.attachments.length > 0 && (
+                                                                                <div className="document-attachment-grid">
+                                                                                    {document.attachments.map((attachment) => (
+                                                                                        <div
+                                                                                            className="document-attachment-card"
+                                                                                            key={attachment._id}
+                                                                                        >
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                className="document-attachment-open"
+                                                                                                onClick={() => openFile(attachment)}
+                                                                                            >
+                                                                                                <span className="document-attachment-preview">
+                                                                                                    {attachment.fileType?.startsWith("image/") ? (
+                                                                                                        <img
+                                                                                                            src={attachment.fileUrl}
+                                                                                                            alt={attachment.fileName}
+                                                                                                        />
+                                                                                                    ) : (
+                                                                                                        <span className="document-file-icon">
+                                                                                                            {attachment.fileType === "application/pdf"
+                                                                                                                ? "PDF"
+                                                                                                                : "FILE"}
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </span>
+                                                                                                <span className="document-attachment-info">
+                                                                                                    <strong title={attachment.fileName}>
+                                                                                                        {attachment.fileName}
+                                                                                                    </strong>
+                                                                                                    <small>
+                                                                                                        {attachment.fileType === "application/pdf"
+                                                                                                            ? "PDF"
+                                                                                                            : attachment.fileType?.startsWith("image/")
+                                                                                                                ? "Image"
+                                                                                                                : "File"}
+                                                                                                    </small>
+                                                                                                </span>
+                                                                                            </button>
+                                                                                            {!isStudent && (
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    className="document-attachment-delete"
+                                                                                                    onClick={() =>
+                                                                                                        handleDeleteDocumentAttachment(
+                                                                                                            document,
+                                                                                                            attachment
+                                                                                                        )
+                                                                                                    }
+                                                                                                    disabled={
+                                                                                                        deletingDocumentAttachment ===
+                                                                                                        attachment._id
+                                                                                                    }
+                                                                                                >
+                                                                                                    {deletingDocumentAttachment === attachment._id
+                                                                                                        ? "Deleting..."
+                                                                                                        : "Delete"}
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+
+                                                                            {!isStudent && (
+                                                                                <div className="document-add-files-row">
+                                                                                    <div className="document-add-files-input">
+                                                                                        <label htmlFor={`document-add-files-${document.id}`}>
+                                                                                            Add Files
+                                                                                        </label>
+                                                                                        <input
+                                                                                            id={`document-add-files-${document.id}`}
+                                                                                            type="file"
+                                                                                            multiple
+                                                                                            onChange={(event) =>
+                                                                                                handleDocumentAttachmentChange(
+                                                                                                    document.id,
+                                                                                                    event.target.files
+                                                                                                )
+                                                                                            }
+                                                                                            disabled={
+                                                                                                addingDocumentFiles === document.id
+                                                                                            }
+                                                                                        />
+                                                                                    </div>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        className="attachment-button"
+                                                                                        disabled={
+                                                                                            selectedFiles.length === 0 ||
+                                                                                            addingDocumentFiles === document.id
+                                                                                        }
+                                                                                        onClick={() =>
+                                                                                            addDocumentAttachments(document)
+                                                                                        }
+                                                                                    >
+                                                                                        {addingDocumentFiles === document.id
+                                                                                            ? "Adding..."
+                                                                                            : "Add Files"}
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </article>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </section>
+                                                    ))}
                                                 </div>
+                                            )}
 
+                                            {!isStudent && documentCreateError && !showDocumentForm && (
+                                                <div className="announcement-form-error">
+                                                    {documentCreateError}
+                                                </div>
                                             )}
 
                                         </div>
 
-                                        {/* ================================= */}
                                         {/* PROJECTS */}
                                         {/* ================================= */}
 
@@ -1911,15 +2746,11 @@ function ClassroomDetails() {
                                                                                         <p>
                                                                                             Selected files:
                                                                                         </p>
-                                                                                        {selectedFiles.map(
-                                                                                            (file, index) => (
-                                                                                                <div
-                                                                                                    key={`${file.name}-${index}`}
-                                                                                                >
-                                                                                                    {file.name}
-                                                                                                </div>
-                                                                                            )
-                                                                                        )}
+                                                                                        {selectedFiles.map((file, index) => (
+                                                                                            <div key={`${file.name}-${index}`}>
+                                                                                                {file.name}
+                                                                                            </div>
+                                                                                        ))}
                                                                                     </div>
                                                                                 )}
 
@@ -1934,15 +2765,13 @@ function ClassroomDetails() {
                                                                                         type="button"
                                                                                         className="submit-assignment-button"
                                                                                         disabled={
-                                                                                            submittingProject ===
-                                                                                            project.id
+                                                                                            submittingProject === project.id
                                                                                         }
                                                                                         onClick={() =>
                                                                                             submitAssignment(project)
                                                                                         }
                                                                                     >
-                                                                                        {submittingProject ===
-                                                                                        project.id
+                                                                                        {submittingProject === project.id
                                                                                             ? "Turning in..."
                                                                                             : "Turn In"}
                                                                                     </button>
@@ -1954,9 +2783,142 @@ function ClassroomDetails() {
                                                                                     </p>
                                                                                 )}
                                                                             </>
+                                                                        ) : submission.status === "draft" ? (
+                                                                            <div className="submitted-assignment">
+                                                                                <div className="submission-header-row">
+                                                                                    <div>
+                                                                                        <div className="submission-status">
+                                                                                            Unsubmitted
+                                                                                        </div>
+                                                                                        <h5>
+                                                                                            Your Files
+                                                                                        </h5>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="submitted-files-list">
+                                                                                    {submission.attachments?.map((attachment) => (
+                                                                                        <div
+                                                                                            className="submission-file-row"
+                                                                                            key={attachment._id}
+                                                                                        >
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                className="project-attachment-button"
+                                                                                                onClick={() =>
+                                                                                                    openFile(attachment)
+                                                                                                }
+                                                                                            >
+                                                                                                {attachment.fileName}
+                                                                                            </button>
+
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                className="project-delete-button"
+                                                                                                disabled={
+                                                                                                    deletingSubmissionAttachment ===
+                                                                                                    attachment._id
+                                                                                                }
+                                                                                                onClick={() =>
+                                                                                                    removeSubmissionAttachment(
+                                                                                                        project,
+                                                                                                        attachment
+                                                                                                    )
+                                                                                                }
+                                                                                            >
+                                                                                                {deletingSubmissionAttachment ===
+                                                                                                attachment._id
+                                                                                                    ? "Removing..."
+                                                                                                    : "Remove"}
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+
+                                                                                <div className="announcement-form-group">
+                                                                                    <label>
+                                                                                        Add more files
+                                                                                    </label>
+                                                                                    <input
+                                                                                        type="file"
+                                                                                        multiple
+                                                                                        onChange={(e) =>
+                                                                                            handleSubmissionFileChange(
+                                                                                                project.id,
+                                                                                                e.target.files
+                                                                                            )
+                                                                                        }
+                                                                                        disabled={
+                                                                                            addingSubmissionFiles ===
+                                                                                            project.id ||
+                                                                                            submittingDraftProject ===
+                                                                                            project.id
+                                                                                        }
+                                                                                    />
+                                                                                </div>
+
+                                                                                {selectedFiles.length > 0 && (
+                                                                                    <div className="selected-files">
+                                                                                        <p>
+                                                                                            Files ready to add:
+                                                                                        </p>
+                                                                                        {selectedFiles.map((file, index) => (
+                                                                                            <div key={`${file.name}-${index}`}>
+                                                                                                {file.name}
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+
+                                                                                {projectError && (
+                                                                                    <p className="classroom-error">
+                                                                                        {projectError}
+                                                                                    </p>
+                                                                                )}
+
+                                                                                {projectMessage && (
+                                                                                    <p className="submission-success">
+                                                                                        {projectMessage}
+                                                                                    </p>
+                                                                                )}
+
+                                                                                <div className="submission-action-row">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        className="attachment-button"
+                                                                                        disabled={
+                                                                                            selectedFiles.length === 0 ||
+                                                                                            addingSubmissionFiles === project.id ||
+                                                                                            submittingDraftProject === project.id
+                                                                                        }
+                                                                                        onClick={() =>
+                                                                                            addSubmissionAttachments(project)
+                                                                                        }
+                                                                                    >
+                                                                                        {addingSubmissionFiles === project.id
+                                                                                            ? "Adding..."
+                                                                                            : "Add Files"}
+                                                                                    </button>
+
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        className="submit-assignment-button"
+                                                                                        disabled={
+                                                                                            submittingDraftProject === project.id ||
+                                                                                            addingSubmissionFiles === project.id
+                                                                                        }
+                                                                                        onClick={() =>
+                                                                                            submitDraft(project)
+                                                                                        }
+                                                                                    >
+                                                                                        {submittingDraftProject === project.id
+                                                                                            ? "Turning in..."
+                                                                                            : "Turn In"}
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
                                                                         ) : (
                                                                             <div className="submitted-assignment">
-
                                                                                 <div className="submission-header-row">
                                                                                     <div>
                                                                                         <div className="submission-status submitted">
@@ -1969,21 +2931,18 @@ function ClassroomDetails() {
                                                                                 </div>
 
                                                                                 <div className="submitted-files-list">
-                                                                                    {submission.attachments &&
-                                                                                        submission.attachments.map(
-                                                                                            (attachment) => (
-                                                                                                <button
-                                                                                                    type="button"
-                                                                                                    className="project-attachment-button"
-                                                                                                    key={attachment._id}
-                                                                                                    onClick={() =>
-                                                                                                        openFile(attachment)
-                                                                                                    }
-                                                                                                >
-                                                                                                    {attachment.fileName}
-                                                                                                </button>
-                                                                                            )
-                                                                                        )}
+                                                                                    {submission.attachments?.map((attachment) => (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="project-attachment-button"
+                                                                                            key={attachment._id}
+                                                                                            onClick={() =>
+                                                                                                openFile(attachment)
+                                                                                            }
+                                                                                        >
+                                                                                            {attachment.fileName}
+                                                                                        </button>
+                                                                                    ))}
                                                                                 </div>
 
                                                                                 {projectError && (
@@ -1992,25 +2951,28 @@ function ClassroomDetails() {
                                                                                     </p>
                                                                                 )}
 
+                                                                                {projectMessage && (
+                                                                                    <p className="submission-success">
+                                                                                        {projectMessage}
+                                                                                    </p>
+                                                                                )}
+
                                                                                 <div className="submission-action-row">
                                                                                     <button
                                                                                         type="button"
                                                                                         className="attachment-button"
                                                                                         disabled={
-                                                                                            unsubmittingProject ===
-                                                                                            project.id
+                                                                                            unsubmittingProject === project.id
                                                                                         }
                                                                                         onClick={() =>
                                                                                             unsubmitAssignment(project)
                                                                                         }
                                                                                     >
-                                                                                        {unsubmittingProject ===
-                                                                                        project.id
+                                                                                        {unsubmittingProject === project.id
                                                                                             ? "Unsubmitting..."
                                                                                             : "Unsubmit"}
                                                                                     </button>
                                                                                 </div>
-
                                                                             </div>
                                                                         )}
 
@@ -2304,6 +3266,189 @@ function ClassroomDetails() {
                             </div>
 
                         </form>
+
+                    </div>
+
+                </div>
+
+            )}
+
+            {/* ================================= */}
+            {/* EDIT DOCUMENT MODAL */}
+            {/* ================================= */}
+
+            {editingDocument && (
+
+                <div
+                    className="modal-overlay"
+                    onMouseDown={() => {
+                        if (!updatingDocument) {
+                            setEditingDocument(null);
+                            setDocumentUpdateError("");
+                        }
+                    }}
+                >
+
+                    <div
+                        className="delete-announcement-modal"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
+
+                        <div className="announcement-form-header">
+                            <div>
+                                <h3>Edit Document</h3>
+                                <p>Update the document title or content.</p>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="announcement-close-button"
+                                onClick={() => {
+                                    if (!updatingDocument) {
+                                        setEditingDocument(null);
+                                        setDocumentUpdateError("");
+                                    }
+                                }}
+                                disabled={updatingDocument}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <form onSubmit={updateDocument}>
+                            <div className="announcement-form-group">
+                                <label>Title</label>
+                                <input
+                                    type="text"
+                                    name="title"
+                                    value={documentForm.title}
+                                    onChange={handleDocumentFormChange}
+                                    disabled={updatingDocument}
+                                />
+                            </div>
+
+                            <div className="announcement-form-group">
+                                <label>Topic / Section</label>
+                                <input
+                                    type="text"
+                                    name="topic"
+                                    placeholder="e.g. Lectures, Practicals, Reference Material"
+                                    value={documentForm.topic}
+                                    onChange={handleDocumentFormChange}
+                                    disabled={updatingDocument}
+                                />
+                            </div>
+
+                            <div className="announcement-form-group">
+                                <label>Description / Content</label>
+                                <textarea
+                                    name="content"
+                                    value={documentForm.content}
+                                    onChange={handleDocumentFormChange}
+                                    rows="5"
+                                    disabled={updatingDocument}
+                                />
+                            </div>
+
+                            {documentUpdateError && (
+                                <div className="announcement-form-error">
+                                    {documentUpdateError}
+                                </div>
+                            )}
+
+                            <div className="announcement-form-actions">
+                                <button
+                                    type="button"
+                                    className="announcement-cancel-button"
+                                    onClick={() => {
+                                        setEditingDocument(null);
+                                        setDocumentUpdateError("");
+                                    }}
+                                    disabled={updatingDocument}
+                                >
+                                    Cancel
+                                </button>
+
+                                <button
+                                    type="submit"
+                                    className="announcement-submit-button"
+                                    disabled={updatingDocument}
+                                >
+                                    {updatingDocument ? "Saving..." : "Save Changes"}
+                                </button>
+                            </div>
+                        </form>
+
+                    </div>
+
+                </div>
+
+            )}
+
+            {/* ================================= */}
+            {/* DELETE DOCUMENT MODAL */}
+            {/* ================================= */}
+
+            {deletingDocument && (
+
+                <div
+                    className="modal-overlay"
+                    onMouseDown={() => {
+                        if (!documentDeleteLoading) {
+                            setDeletingDocument(null);
+                            setDocumentDeleteError("");
+                        }
+                    }}
+                >
+
+                    <div
+                        className="delete-announcement-modal"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
+
+                        <div className="delete-icon">!</div>
+
+                        <h2>
+                            Delete Document?
+                        </h2>
+
+                        <p>
+                            Are you sure you want to delete{" "}
+                            <strong>{deletingDocument.title}</strong>?
+                            <br />
+                            This will also remove all of its attachments.
+                        </p>
+
+                        {documentDeleteError && (
+                            <div className="announcement-form-error">
+                                {documentDeleteError}
+                            </div>
+                        )}
+
+                        <div className="delete-modal-actions">
+                            <button
+                                type="button"
+                                className="announcement-cancel-button"
+                                onClick={() => {
+                                    setDeletingDocument(null);
+                                    setDocumentDeleteError("");
+                                }}
+                                disabled={documentDeleteLoading}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="button"
+                                className="announcement-confirm-delete-button"
+                                onClick={handleDeleteDocument}
+                                disabled={documentDeleteLoading}
+                            >
+                                {documentDeleteLoading
+                                    ? "Deleting..."
+                                    : "Delete Document"}
+                            </button>
+                        </div>
 
                     </div>
 
