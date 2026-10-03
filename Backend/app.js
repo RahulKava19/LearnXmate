@@ -9,7 +9,7 @@ const documentRoutes = require("./routes/DocumentRoutes");
 const projectRoutes = require("./routes/ProjectRoutes");
 const submissionRoutes = require("./routes/SubmissionRoutes");
 const meetingRoutes = require("./routes/MeetingRoutes");
-
+const announcementRoutes = require("./routes/AnnouncementRoutes");
 const app = express();
 const PORT = process.env.PORT || 5000;
 const path = require("path");
@@ -31,7 +31,7 @@ app.use("/api/classrooms", documentRoutes);
 app.use("/api/classrooms", projectRoutes);
 app.use("/api/classrooms", submissionRoutes);
 app.use("/api/meetings", meetingRoutes);
-
+app.use("/api/classrooms",announcementRoutes);
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
