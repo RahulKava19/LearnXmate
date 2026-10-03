@@ -20,6 +20,12 @@ const submissionSchema = new mongoose.Schema(
             required: true
         },
 
+        status: {
+            type: String,
+            enum: ["draft", "submitted"],
+            default: "submitted"
+        },
+
         attachments: [
             {
                 fileName: {
@@ -31,6 +37,10 @@ const submissionSchema = new mongoose.Schema(
                 },
 
                 fileUrl: {
+                    type: String
+                },
+
+                publicId: {
                     type: String
                 }
             }

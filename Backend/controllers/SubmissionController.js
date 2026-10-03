@@ -7,7 +7,10 @@ const ClassroomStudents = require("../models/ClassroomStudent");
 const uploadToCloudinary = require("../utils/cloudinaryUpload");
 const cloudinary = require("../config/cloudinary");
 
+// =============================================
 // DELETE FILES FROM CLOUDINARY
+// =============================================
+
 const deleteCloudinaryFiles = async (publicIds) => {
     for (const publicId of publicIds) {
         try {
@@ -23,7 +26,10 @@ const deleteCloudinaryFiles = async (publicIds) => {
     }
 };
 
+// =============================================
 // CREATE SUBMISSION
+// =============================================
+
 const createSubmission = async (req, res) => {
     const uploadedPublicIds = [];
 
@@ -37,6 +43,10 @@ const createSubmission = async (req, res) => {
         const classroomId = req.params.classroomId;
         const projectId = req.params.projectId;
 
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
+
         const classroom = await Classroom.findOne({
             id: Number(classroomId)
         });
@@ -46,6 +56,10 @@ const createSubmission = async (req, res) => {
                 message: "Classroom not found"
             });
         }
+
+        // -----------------------------------------
+        // CHECK STUDENT MEMBERSHIP
+        // -----------------------------------------
 
         const student = await ClassroomStudents.findOne({
             classroom: classroom._id,
@@ -58,6 +72,10 @@ const createSubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
+
         const project = await Project.findOne({
             id: Number(projectId),
             classroom: classroom._id
@@ -69,11 +87,19 @@ const createSubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK DEADLINE
+        // -----------------------------------------
+
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
                 message: "The submission deadline has passed"
             });
         }
+
+        // -----------------------------------------
+        // CHECK EXISTING SUBMISSION
+        // -----------------------------------------
 
         const existingSubmission = await Submission.findOne({
             project: project._id,
@@ -82,9 +108,14 @@ const createSubmission = async (req, res) => {
 
         if (existingSubmission) {
             return res.status(400).json({
-                message: "You have already submitted this project"
+                message:
+                    "You already have a submission for this project"
             });
         }
+
+        // -----------------------------------------
+        // AT LEAST ONE FILE REQUIRED
+        // -----------------------------------------
 
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({
@@ -92,7 +123,20 @@ const createSubmission = async (req, res) => {
             });
         }
 
-        // Generate submission ID automatically
+        // -----------------------------------------
+        // MAXIMUM 10 FILES
+        // -----------------------------------------
+
+        if (req.files.length > 10) {
+            return res.status(400).json({
+                message: "A submission can contain maximum 10 files"
+            });
+        }
+
+        // -----------------------------------------
+        // GENERATE SUBMISSION ID
+        // -----------------------------------------
+
         const lastSubmission = await Submission.findOne()
             .sort({ id: -1 })
             .select("id");
@@ -100,7 +144,10 @@ const createSubmission = async (req, res) => {
         const submissionId =
             lastSubmission ? lastSubmission.id + 1 : 1;
 
-        // Upload files to Cloudinary
+        // -----------------------------------------
+        // UPLOAD FILES
+        // -----------------------------------------
+
         const attachments = [];
 
         for (const file of req.files) {
@@ -120,10 +167,15 @@ const createSubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CREATE SUBMISSION
+        // -----------------------------------------
+
         const submission = await Submission.create({
             id: submissionId,
             project: project._id,
             learner: req.user.userId,
+            status: "submitted",
             attachments
         });
 
@@ -138,14 +190,22 @@ const createSubmission = async (req, res) => {
     }
 };
 
+// =============================================
 // GET ALL SUBMISSIONS FOR A PROJECT
+// =============================================
+
 const getProjectSubmissions = async (req, res) => {
     try {
         if (req.user.role !== "teacher") {
             return res.status(403).json({
-                message: "Only instructors can view project submissions"
+                message:
+                    "Only instructors can view project submissions"
             });
         }
+
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
 
         const classroom = await Classroom.findOne({
             id: Number(req.params.classroomId)
@@ -156,6 +216,10 @@ const getProjectSubmissions = async (req, res) => {
                 message: "Classroom not found"
             });
         }
+
+        // -----------------------------------------
+        // CHECK INSTRUCTOR
+        // -----------------------------------------
 
         const instructor = await ClassroomInstructor.findOne({
             classroom: classroom._id,
@@ -168,6 +232,10 @@ const getProjectSubmissions = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
+
         const project = await Project.findOne({
             id: Number(req.params.projectId),
             classroom: classroom._id
@@ -179,8 +247,16 @@ const getProjectSubmissions = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // ONLY GET SUBMITTED WORK
+        // -----------------------------------------
+
         const submissions = await Submission.find({
-            project: project._id
+            project: project._id,
+            $or: [
+                { status: "submitted" },
+                { status: { $exists: false } }
+            ]
         })
             .populate("learner", "name email")
             .sort({ createdAt: -1 });
@@ -201,9 +277,16 @@ const getProjectSubmissions = async (req, res) => {
     }
 };
 
+// =============================================
 // GET ONE SUBMISSION
+// =============================================
+
 const getSubmission = async (req, res) => {
     try {
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
+
         const classroom = await Classroom.findOne({
             id: Number(req.params.classroomId)
         });
@@ -213,6 +296,10 @@ const getSubmission = async (req, res) => {
                 message: "Classroom not found"
             });
         }
+
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
@@ -225,6 +312,10 @@ const getSubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // FIND SUBMISSION
+        // -----------------------------------------
+
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
             project: project._id
@@ -236,14 +327,18 @@ const getSubmission = async (req, res) => {
             });
         }
 
-        // Student access
+        // -----------------------------------------
+        // STUDENT ACCESS
+        // -----------------------------------------
+
         if (req.user.role === "student") {
             if (
                 submission.learner._id.toString() !==
                 req.user.userId
             ) {
                 return res.status(403).json({
-                    message: "You can only view your own submission"
+                    message:
+                        "You can only view your own submission"
                 });
             }
 
@@ -254,21 +349,27 @@ const getSubmission = async (req, res) => {
 
             if (!student) {
                 return res.status(403).json({
-                    message: "You are not a member of this classroom"
+                    message:
+                        "You are not a member of this classroom"
                 });
             }
         }
 
-        // Teacher access
+        // -----------------------------------------
+        // TEACHER ACCESS
+        // -----------------------------------------
+
         else if (req.user.role === "teacher") {
-            const instructor = await ClassroomInstructor.findOne({
-                classroom: classroom._id,
-                instructor: req.user.userId
-            });
+            const instructor =
+                await ClassroomInstructor.findOne({
+                    classroom: classroom._id,
+                    instructor: req.user.userId
+                });
 
             if (!instructor) {
                 return res.status(403).json({
-                    message: "You are not the instructor of this classroom"
+                    message:
+                        "You are not the instructor of this classroom"
                 });
             }
         }
@@ -295,16 +396,24 @@ const getSubmission = async (req, res) => {
     }
 };
 
+// =============================================
 // ADD SUBMISSION ATTACHMENTS
+// =============================================
+
 const addSubmissionAttachments = async (req, res) => {
     const uploadedPublicIds = [];
 
     try {
         if (req.user.role !== "student") {
             return res.status(403).json({
-                message: "Only learners can add submission files"
+                message:
+                    "Only learners can add submission files"
             });
         }
+
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
 
         const classroom = await Classroom.findOne({
             id: Number(req.params.classroomId)
@@ -316,6 +425,10 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK STUDENT
+        // -----------------------------------------
+
         const student = await ClassroomStudents.findOne({
             classroom: classroom._id,
             student: req.user.userId
@@ -323,9 +436,14 @@ const addSubmissionAttachments = async (req, res) => {
 
         if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
+
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
@@ -338,11 +456,20 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK DEADLINE
+        // -----------------------------------------
+
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
-                message: "The submission deadline has passed"
+                message:
+                    "The submission deadline has passed"
             });
         }
+
+        // -----------------------------------------
+        // FIND SUBMISSION
+        // -----------------------------------------
 
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
@@ -356,17 +483,45 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // ONLY DRAFT CAN BE EDITED
+        // -----------------------------------------
+
+        if (submission.status === "submitted") {
+            return res.status(400).json({
+                message:
+                    "You must unsubmit the project before adding files"
+            });
+        }
+
+        // -----------------------------------------
+        // CHECK FILES
+        // -----------------------------------------
+
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({
                 message: "At least one file is required"
             });
         }
 
-        if (submission.attachments.length + req.files.length > 10) {
+        // -----------------------------------------
+        // MAXIMUM 10 FILES
+        // -----------------------------------------
+
+        if (
+            submission.attachments.length +
+            req.files.length >
+            10
+        ) {
             return res.status(400).json({
-                message: "A submission can contain maximum 10 files"
+                message:
+                    "A submission can contain maximum 10 files"
             });
         }
+
+        // -----------------------------------------
+        // UPLOAD FILES
+        // -----------------------------------------
 
         const attachments = [];
 
@@ -387,9 +542,15 @@ const addSubmissionAttachments = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // ADD ATTACHMENTS
+        // -----------------------------------------
+
         const updatedSubmission =
             await Submission.findOneAndUpdate(
-                { _id: submission._id },
+                {
+                    _id: submission._id
+                },
                 {
                     $push: {
                         attachments: {
@@ -417,14 +578,22 @@ const addSubmissionAttachments = async (req, res) => {
     }
 };
 
+// =============================================
 // DELETE SUBMISSION ATTACHMENT
+// =============================================
+
 const deleteSubmissionAttachment = async (req, res) => {
     try {
         if (req.user.role !== "student") {
             return res.status(403).json({
-                message: "Only learners can delete submission files"
+                message:
+                    "Only learners can delete submission files"
             });
         }
+
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
 
         const classroom = await Classroom.findOne({
             id: Number(req.params.classroomId)
@@ -436,6 +605,10 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK STUDENT
+        // -----------------------------------------
+
         const student = await ClassroomStudents.findOne({
             classroom: classroom._id,
             student: req.user.userId
@@ -443,9 +616,14 @@ const deleteSubmissionAttachment = async (req, res) => {
 
         if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
+
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
@@ -458,11 +636,20 @@ const deleteSubmissionAttachment = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK DEADLINE
+        // -----------------------------------------
+
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
-                message: "The submission deadline has passed"
+                message:
+                    "The submission deadline has passed"
             });
         }
+
+        // -----------------------------------------
+        // FIND SUBMISSION
+        // -----------------------------------------
 
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
@@ -475,6 +662,21 @@ const deleteSubmissionAttachment = async (req, res) => {
                 message: "Submission not found"
             });
         }
+
+        // -----------------------------------------
+        // ONLY DRAFT CAN BE EDITED
+        // -----------------------------------------
+
+        if (submission.status === "submitted") {
+            return res.status(400).json({
+                message:
+                    "You must unsubmit the project before deleting files"
+            });
+        }
+
+        // -----------------------------------------
+        // FIND ATTACHMENT
+        // -----------------------------------------
 
         const attachment =
             submission.attachments.id(
@@ -489,14 +691,19 @@ const deleteSubmissionAttachment = async (req, res) => {
 
         const publicId = attachment.publicId;
 
-        // Remove the file
+        // -----------------------------------------
+        // REMOVE ATTACHMENT
+        // -----------------------------------------
+
         submission.attachments.pull(
             req.params.attachmentId
         );
 
-        // IMPORTANT:
-        // If no files remain, delete the entire submission.
-        // This allows the student to submit again.
+        // -----------------------------------------
+        // IF LAST FILE IS REMOVED
+        // DELETE DRAFT
+        // -----------------------------------------
+
         if (submission.attachments.length === 0) {
             await Submission.deleteOne({
                 _id: submission._id
@@ -512,6 +719,10 @@ const deleteSubmissionAttachment = async (req, res) => {
                 submission: null
             });
         }
+
+        // -----------------------------------------
+        // SAVE UPDATED SUBMISSION
+        // -----------------------------------------
 
         await submission.save();
 
@@ -531,14 +742,30 @@ const deleteSubmissionAttachment = async (req, res) => {
     }
 };
 
-// DELETE ENTIRE SUBMISSION
+// =============================================
+// UNSUBMIT PROJECT
+// =============================================
+//
+// IMPORTANT:
+// This no longer deletes the submission.
+// It changes:
+// submitted -> draft
+//
+// Existing files remain untouched.
+// =============================================
+
 const deleteSubmission = async (req, res) => {
     try {
         if (req.user.role !== "student") {
             return res.status(403).json({
-                message: "Only learners can delete submissions"
+                message:
+                    "Only learners can unsubmit submissions"
             });
         }
+
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
 
         const classroom = await Classroom.findOne({
             id: Number(req.params.classroomId)
@@ -550,6 +777,10 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK STUDENT
+        // -----------------------------------------
+
         const student = await ClassroomStudents.findOne({
             classroom: classroom._id,
             student: req.user.userId
@@ -557,9 +788,14 @@ const deleteSubmission = async (req, res) => {
 
         if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
+
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
@@ -572,11 +808,20 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK DEADLINE
+        // -----------------------------------------
+
         if (project.dueDate && new Date() > project.dueDate) {
             return res.status(400).json({
-                message: "The submission deadline has passed"
+                message:
+                    "The submission deadline has passed"
             });
         }
+
+        // -----------------------------------------
+        // FIND SUBMISSION
+        // -----------------------------------------
 
         const submission = await Submission.findOne({
             id: Number(req.params.submissionId),
@@ -590,18 +835,33 @@ const deleteSubmission = async (req, res) => {
             });
         }
 
-        const publicIds = submission.attachments
-            .map((attachment) => attachment.publicId)
-            .filter(Boolean);
+        // -----------------------------------------
+        // ALREADY DRAFT
+        // -----------------------------------------
 
-        await Submission.deleteOne({
-            _id: submission._id
-        });
+        if (submission.status === "draft") {
+            return res.status(400).json({
+                message:
+                    "This project is already unsubmitted"
+            });
+        }
 
-        await deleteCloudinaryFiles(publicIds);
+        // -----------------------------------------
+        // CHANGE TO DRAFT
+        // -----------------------------------------
+
+        submission.status = "draft";
+
+        await submission.save();
+
+        // -----------------------------------------
+        // KEEP ALL ATTACHMENTS
+        // -----------------------------------------
 
         res.status(200).json({
-            message: "Submission deleted successfully"
+            message:
+                "Assignment unsubmitted. Your files have been kept.",
+            submission
         });
 
     } catch (error) {
@@ -610,14 +870,28 @@ const deleteSubmission = async (req, res) => {
         });
     }
 };
-// GET MY SUBMISSION FOR A PROJECT
-const getMySubmission = async (req, res) => {
+
+// =============================================
+// TURN IN DRAFT SUBMISSION
+// =============================================
+//
+// draft -> submitted
+//
+// At least one attachment is required.
+// =============================================
+
+const submitDraft = async (req, res) => {
     try {
         if (req.user.role !== "student") {
             return res.status(403).json({
-                message: "Only learners can access their submission"
+                message:
+                    "Only learners can submit projects"
             });
         }
+
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
 
         const classroom = await Classroom.findOne({
             id: Number(req.params.classroomId)
@@ -629,6 +903,10 @@ const getMySubmission = async (req, res) => {
             });
         }
 
+        // -----------------------------------------
+        // CHECK STUDENT
+        // -----------------------------------------
+
         const student = await ClassroomStudents.findOne({
             classroom: classroom._id,
             student: req.user.userId
@@ -636,9 +914,14 @@ const getMySubmission = async (req, res) => {
 
         if (!student) {
             return res.status(403).json({
-                message: "You are not a member of this classroom"
+                message:
+                    "You are not a member of this classroom"
             });
         }
+
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
 
         const project = await Project.findOne({
             id: Number(req.params.projectId),
@@ -650,6 +933,141 @@ const getMySubmission = async (req, res) => {
                 message: "Project not found"
             });
         }
+
+        // -----------------------------------------
+        // CHECK DEADLINE
+        // -----------------------------------------
+
+        if (project.dueDate && new Date() > project.dueDate) {
+            return res.status(400).json({
+                message:
+                    "The submission deadline has passed"
+            });
+        }
+
+        // -----------------------------------------
+        // FIND SUBMISSION
+        // -----------------------------------------
+
+        const submission = await Submission.findOne({
+            id: Number(req.params.submissionId),
+            project: project._id,
+            learner: req.user.userId
+        });
+
+        if (!submission) {
+            return res.status(404).json({
+                message: "Submission not found"
+            });
+        }
+
+        // -----------------------------------------
+        // CHECK STATUS
+        // -----------------------------------------
+
+        if (submission.status === "submitted") {
+            return res.status(400).json({
+                message:
+                    "This project has already been submitted"
+            });
+        }
+
+        // -----------------------------------------
+        // AT LEAST ONE FILE REQUIRED
+        // -----------------------------------------
+
+        if (
+            !submission.attachments ||
+            submission.attachments.length === 0
+        ) {
+            return res.status(400).json({
+                message:
+                    "At least one file is required before turning in the project"
+            });
+        }
+
+        // -----------------------------------------
+        // TURN IN
+        // -----------------------------------------
+
+        submission.status = "submitted";
+
+        await submission.save();
+
+        res.status(200).json({
+            message:
+                "Assignment turned in successfully.",
+            submission
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            message: error.message
+        });
+    }
+};
+
+// =============================================
+// GET MY SUBMISSION FOR A PROJECT
+// =============================================
+
+const getMySubmission = async (req, res) => {
+    try {
+        if (req.user.role !== "student") {
+            return res.status(403).json({
+                message:
+                    "Only learners can access their submission"
+            });
+        }
+
+        // -----------------------------------------
+        // CHECK CLASSROOM
+        // -----------------------------------------
+
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.classroomId)
+        });
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+
+        // -----------------------------------------
+        // CHECK STUDENT
+        // -----------------------------------------
+
+        const student = await ClassroomStudents.findOne({
+            classroom: classroom._id,
+            student: req.user.userId
+        });
+
+        if (!student) {
+            return res.status(403).json({
+                message:
+                    "You are not a member of this classroom"
+            });
+        }
+
+        // -----------------------------------------
+        // CHECK PROJECT
+        // -----------------------------------------
+
+        const project = await Project.findOne({
+            id: Number(req.params.projectId),
+            classroom: classroom._id
+        });
+
+        if (!project) {
+            return res.status(404).json({
+                message: "Project not found"
+            });
+        }
+
+        // -----------------------------------------
+        // FIND SUBMISSION
+        // -----------------------------------------
 
         const submission = await Submission.findOne({
             project: project._id,
@@ -671,6 +1089,10 @@ const getMySubmission = async (req, res) => {
     }
 };
 
+// =============================================
+// EXPORTS
+// =============================================
+
 module.exports = {
     createSubmission,
     getProjectSubmissions,
@@ -678,5 +1100,6 @@ module.exports = {
     addSubmissionAttachments,
     deleteSubmissionAttachment,
     deleteSubmission,
+    submitDraft,
     getMySubmission
 };
