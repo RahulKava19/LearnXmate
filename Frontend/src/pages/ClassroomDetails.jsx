@@ -33,7 +33,20 @@ function ClassroomDetails() {
     const [projectDeleteLoading, setProjectDeleteLoading] = useState(false);
     const [projectDeleteError, setProjectDeleteError] = useState("");
 
+    // Teacher submission states
+    const [viewingSubmissionsProject, setViewingSubmissionsProject] =
+        useState(null);
+    const [projectSubmissions, setProjectSubmissions] = useState([]);
+    const [submissionCount, setSubmissionCount] = useState(0);
+    const [submissionsLoading, setSubmissionsLoading] = useState(false);
+    const [submissionsError, setSubmissionsError] = useState("");
+
     const [instructor, setInstructor] = useState(null);
+
+    // Teacher people management states
+    const [removingStudent, setRemovingStudent] = useState(null);
+    const [removeStudentLoading, setRemoveStudentLoading] = useState(false);
+    const [removeStudentError, setRemoveStudentError] = useState("");
 
     const [activeTab, setActiveTab] = useState("stream");
 
@@ -494,6 +507,51 @@ function ClassroomDetails() {
     };
 
     // =============================================
+    // REMOVE STUDENT FROM CLASSROOM
+    // =============================================
+
+    const handleRemoveStudent = async () => {
+        if (!removingStudent?.student?._id) {
+            return;
+        }
+
+        try {
+            setRemoveStudentLoading(true);
+            setRemoveStudentError("");
+
+            const token = localStorage.getItem("token");
+
+            await axios.delete(
+                `http://localhost:5000/api/classrooms/${id}/students/${removingStudent.student._id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setStudents((previous) =>
+                previous.filter(
+                    (item) => item._id !== removingStudent._id
+                )
+            );
+
+            setRemovingStudent(null);
+
+        } catch (error) {
+            console.error(error);
+
+            setRemoveStudentError(
+                error.response?.data?.message ||
+                "Unable to remove student from classroom."
+            );
+
+        } finally {
+            setRemoveStudentLoading(false);
+        }
+    };
+
+    // =============================================
     // GET ANNOUNCEMENTS
     // =============================================
 
@@ -724,6 +782,53 @@ function ClassroomDetails() {
             );
         } finally {
             setAnnouncementDeleteLoading(false);
+        }
+    };
+
+    // =============================================
+    // VIEW PROJECT SUBMISSIONS
+    // =============================================
+
+    const openProjectSubmissions = async (project) => {
+        try {
+            setViewingSubmissionsProject(project);
+            setProjectSubmissions([]);
+            setSubmissionCount(0);
+            setSubmissionsError("");
+            setSubmissionsLoading(true);
+
+            const token = localStorage.getItem("token");
+
+            const response = await axios.get(
+                `http://localhost:5000/api/classrooms/${id}/projects/${project.id}/submissions`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            setProjectSubmissions(response.data.submissions || []);
+            setSubmissionCount(response.data.totalSubmissions || 0);
+
+        } catch (error) {
+            console.error(error);
+
+            setSubmissionsError(
+                error.response?.data?.message ||
+                "Unable to load submissions."
+            );
+        } finally {
+            setSubmissionsLoading(false);
+        }
+    };
+
+    const closeProjectSubmissions = () => {
+        if (!submissionsLoading) {
+            setViewingSubmissionsProject(null);
+            setProjectSubmissions([]);
+            setSubmissionCount(0);
+            setSubmissionsError("");
         }
     };
 
@@ -1712,6 +1817,16 @@ function ClassroomDetails() {
                                                                             >
                                                                                 Delete
                                                                             </button>
+
+                                                                            <button
+                                                                                type="button"
+                                                                                className="project-submissions-button"
+                                                                                onClick={() =>
+                                                                                    openProjectSubmissions(project)
+                                                                                }
+                                                                            >
+                                                                                View Submissions
+                                                                            </button>
                                                                         </div>
                                                                     )}
 
@@ -2028,6 +2143,19 @@ function ClassroomDetails() {
 
                                                     </div>
 
+                                                    {!isStudent && (
+                                                        <button
+                                                            type="button"
+                                                            className="announcement-delete-button"
+                                                            onClick={() => {
+                                                                setRemovingStudent(item);
+                                                                setRemoveStudentError("");
+                                                            }}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    )}
+
                                                 </div>
 
                                             ))
@@ -2253,6 +2381,212 @@ function ClassroomDetails() {
                                 {projectDeleteLoading
                                     ? "Deleting..."
                                     : "Delete Assignment"}
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            )}
+
+            {/* ================================= */}
+            {/* VIEW SUBMISSIONS MODAL */}
+            {/* ================================= */}
+
+            {viewingSubmissionsProject && (
+
+                <div
+                    className="modal-overlay"
+                    onMouseDown={closeProjectSubmissions}
+                >
+
+                    <div
+                        className="submissions-modal"
+                        onMouseDown={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
+                        <div className="submissions-modal-header">
+
+                            <div>
+                                <h2>
+                                    {viewingSubmissionsProject.title}
+                                </h2>
+
+                                <p>
+                                    {submissionCount} {submissionCount === 1
+                                        ? "submission"
+                                        : "submissions"}
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="announcement-close-button"
+                                onClick={closeProjectSubmissions}
+                                disabled={submissionsLoading}
+                            >
+                                ×
+                            </button>
+
+                        </div>
+
+                        {submissionsLoading && (
+                            <div className="content-placeholder">
+                                Loading submissions...
+                            </div>
+                        )}
+
+                        {submissionsError && (
+                            <div className="classroom-error">
+                                {submissionsError}
+                            </div>
+                        )}
+
+                        {!submissionsLoading &&
+                            !submissionsError &&
+                            (projectSubmissions.length === 0 ? (
+                                <div className="empty-classroom-content">
+                                    <h3>No submissions yet</h3>
+                                    <p>
+                                        No student has submitted this assignment yet.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="submissions-list">
+                                    {projectSubmissions.map((submission) => (
+                                        <div
+                                            className="submission-student-card"
+                                            key={submission._id}
+                                        >
+
+                                            <div className="submission-student-info">
+                                                <div className="submission-student-avatar">
+                                                    {submission.learner?.name
+                                                        ?.charAt(0)
+                                                        .toUpperCase()}
+                                                </div>
+
+                                                <div>
+                                                    <h4>
+                                                        {submission.learner?.name ||
+                                                            "Student"}
+                                                    </h4>
+
+                                                    <p>
+                                                        {submission.learner?.email ||
+                                                            ""}
+                                                    </p>
+
+                                                    <span>
+                                                        Submitted {new Date(
+                                                            submission.createdAt
+                                                        ).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="submission-files">
+                                                {submission.attachments?.map(
+                                                    (attachment) => (
+                                                        <button
+                                                            type="button"
+                                                            className="project-attachment-button"
+                                                            key={attachment._id}
+                                                            onClick={() =>
+                                                                openFile(attachment)
+                                                            }
+                                                        >
+                                                            {attachment.fileName}
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
+
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+
+                    </div>
+
+                </div>
+
+            )}
+
+            {/* ================================= */}
+            {/* REMOVE STUDENT MODAL */}
+            {/* ================================= */}
+
+            {removingStudent && (
+
+                <div
+                    className="modal-overlay"
+                    onMouseDown={() => {
+                        if (!removeStudentLoading) {
+                            setRemovingStudent(null);
+                            setRemoveStudentError("");
+                        }
+                    }}
+                >
+
+                    <div
+                        className="delete-announcement-modal"
+                        onMouseDown={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
+                        <div className="delete-icon">
+                            !
+                        </div>
+
+                        <h2>
+                            Remove Student?
+                        </h2>
+
+                        <p>
+                            Are you sure you want to remove{" "}
+                            <strong>
+                                {removingStudent.student?.name || "this student"}
+                            </strong>{" "}
+                            from this classroom?
+                            <br />
+                            The student's account will not be deleted.
+                        </p>
+
+                        {removeStudentError && (
+                            <div className="announcement-form-error">
+                                {removeStudentError}
+                            </div>
+                        )}
+
+                        <div className="delete-modal-actions">
+
+                            <button
+                                type="button"
+                                className="announcement-cancel-button"
+                                onClick={() => {
+                                    setRemovingStudent(null);
+                                    setRemoveStudentError("");
+                                }}
+                                disabled={removeStudentLoading}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="button"
+                                className="announcement-confirm-delete-button"
+                                onClick={handleRemoveStudent}
+                                disabled={removeStudentLoading}
+                            >
+                                {removeStudentLoading
+                                    ? "Removing..."
+                                    : "Remove Student"}
                             </button>
 
                         </div>
