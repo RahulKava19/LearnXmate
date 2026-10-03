@@ -359,6 +359,71 @@ const getClassroomStudents = async (req, res) => {
 };
 
 
+// REMOVE STUDENT FROM CLASSROOM
+const removeStudentFromClassroom = async (req, res) => {
+    try {
+
+        // Only teachers can remove students
+        if (req.user.role !== "teacher") {
+            return res.status(403).json({
+                message: "Only instructors can remove students"
+            });
+        }
+
+        // Find classroom using the custom classroom ID
+        const classroom = await Classroom.findOne({
+            id: Number(req.params.id)
+        });
+
+        if (!classroom) {
+            return res.status(404).json({
+                message: "Classroom not found"
+            });
+        }
+
+        // Check whether this teacher is the instructor of the classroom
+        const instructor = await ClassroomInstructor.findOne({
+            classroom: classroom._id,
+            instructor: req.user.userId
+        });
+
+        if (!instructor) {
+            return res.status(403).json({
+                message: "You are not an instructor of this classroom"
+            });
+        }
+
+        // Find the student's membership in this classroom
+        const studentMembership = await ClassroomStudent.findOne({
+            classroom: classroom._id,
+            student: req.params.studentId
+        });
+
+        if (!studentMembership) {
+            return res.status(404).json({
+                message: "Student is not a member of this classroom"
+            });
+        }
+
+        // Remove only the classroom membership
+        await ClassroomStudent.deleteOne({
+            _id: studentMembership._id
+        });
+
+        res.status(200).json({
+            message: "Student removed from classroom successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: error.message
+        });
+
+    }
+};
+
+
 module.exports = {
     createClassroom,
     getClassrooms,
@@ -366,5 +431,6 @@ module.exports = {
     updateClassroom,
     deleteClassroom,
     joinClassroom,
-    getClassroomStudents 
+    getClassroomStudents,
+    removeStudentFromClassroom
 };
