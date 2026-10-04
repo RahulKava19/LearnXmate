@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import Sidebar from "../components/Sidebar";
+import MeetingSection from "../components/MeetingSection";
 import "./ClassroomDetails.css";
 
 function ClassroomDetails() {
@@ -96,6 +97,7 @@ function ClassroomDetails() {
     const [documentDeleteError, setDocumentDeleteError] = useState("");
 
     const [selectedDocumentFiles, setSelectedDocumentFiles] = useState({});
+    const [expandedDocuments, setExpandedDocuments] = useState({});
     const [addingDocumentFiles, setAddingDocumentFiles] = useState(null);
     const [deletingDocumentAttachment, setDeletingDocumentAttachment] =
         useState(null);
@@ -660,6 +662,13 @@ function ClassroomDetails() {
         }
     };
 
+    const toggleDocument = (documentId) => {
+        setExpandedDocuments((previous) => ({
+            ...previous,
+            [documentId]: !previous[documentId]
+        }));
+    };
+
     const handleDocumentAttachmentChange = (documentId, files) => {
         const selectedFiles = Array.from(files || []);
 
@@ -1173,16 +1182,64 @@ function ClassroomDetails() {
     // OPEN FILE
     // =============================================
 
-    const openFile = (attachment) => {
+    const openFile = async (attachment) => {
         const fileUrl =
             attachment.fileUrl?.startsWith("http")
                 ? attachment.fileUrl
                 : `http://localhost:5000${attachment.fileUrl}`;
 
+        if (
+            selectedFile?.url &&
+            selectedFile.url.startsWith("blob:")
+        ) {
+            URL.revokeObjectURL(selectedFile.url);
+        }
+
+        // Cloudinary raw files can sometimes be returned
+        // with an incorrect browser MIME type. Fetch the
+        // actual bytes and create a real PDF Blob.
+        if (attachment.fileType === "application/pdf") {
+            try {
+                const response = await fetch(fileUrl);
+
+                if (!response.ok) {
+                    throw new Error("Unable to load PDF");
+                }
+
+                const originalBlob =
+                    await response.blob();
+
+                const pdfBlob = new Blob(
+                    [originalBlob],
+                    {
+                        type: "application/pdf"
+                    }
+                );
+
+                const pdfBlobUrl =
+                    URL.createObjectURL(pdfBlob);
+
+                setSelectedFile({
+                    name: attachment.fileName,
+                    type: "application/pdf",
+                    url: pdfBlobUrl,
+                    originalUrl: fileUrl
+                });
+
+                return;
+            } catch (error) {
+                console.error(
+                    "Unable to preview PDF:",
+                    error
+                );
+            }
+        }
+
         setSelectedFile({
             name: attachment.fileName,
             type: attachment.fileType,
-            url: fileUrl
+            url: fileUrl,
+            originalUrl: fileUrl
         });
     };
 
@@ -1191,7 +1248,79 @@ function ClassroomDetails() {
     // =============================================
 
     const closeFile = () => {
+        if (
+            selectedFile?.url &&
+            selectedFile.url.startsWith("blob:")
+        ) {
+            URL.revokeObjectURL(selectedFile.url);
+        }
+
         setSelectedFile(null);
+    };
+
+    const downloadSelectedFile = async () => {
+        if (!selectedFile?.originalUrl) {
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                selectedFile.originalUrl
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    "Unable to download file"
+                );
+            }
+
+            const blob =
+                await response.blob();
+
+            const downloadBlob =
+                selectedFile.type ===
+                "application/pdf"
+                    ? new Blob(
+                          [blob],
+                          {
+                              type: "application/pdf"
+                          }
+                      )
+                    : blob;
+
+            const downloadUrl =
+                URL.createObjectURL(
+                    downloadBlob
+                );
+
+            const link =
+                document.createElement("a");
+
+            link.href = downloadUrl;
+            link.download =
+                selectedFile.name ||
+                "download";
+
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            URL.revokeObjectURL(
+                downloadUrl
+            );
+
+        } catch (error) {
+            console.error(
+                "Unable to download file:",
+                error
+            );
+
+            window.open(
+                selectedFile.originalUrl,
+                "_blank",
+                "noopener,noreferrer"
+            );
+        }
     };
 
     // =============================================
@@ -2039,6 +2168,17 @@ function ClassroomDetails() {
                     )}
 
                     {/* ================================= */}
+                    {/* MEETINGS */}
+                    {/* ================================= */}
+
+                    {activeTab === "stream" && (
+                        <MeetingSection
+                            classroomId={id}
+                            isStudent={isStudent}
+                        />
+                    )}
+
+                    {/* ================================= */}
                     {/* CLASSWORK */}
                     {/* ================================= */}
 
@@ -2079,6 +2219,9 @@ function ClassroomDetails() {
                                             <div className="section-header documents-section-header">
                                                 <div>
                                                     <h3>Documents</h3>
+                                                    <p className="tab-description">
+                                                        Reference materials and files for this classroom.
+                                                    </p>
                                                 </div>
 
                                                 {/* Keep the classroom document area clean once a document exists. */}
@@ -2253,7 +2396,26 @@ function ClassroomDetails() {
                                                                             key={document._id}
                                                                         >
                                                                             <div className="document-card-header">
-                                                                                <div className="document-card-title-wrap">
+                                                                                <div
+                                                                                    className="document-card-title-wrap document-card-title-toggle"
+                                                                                    role="button"
+                                                                                    tabIndex={0}
+                                                                                    aria-expanded={Boolean(
+                                                                                        expandedDocuments[document.id]
+                                                                                    )}
+                                                                                    onClick={() =>
+                                                                                        toggleDocument(document.id)
+                                                                                    }
+                                                                                    onKeyDown={(event) => {
+                                                                                        if (
+                                                                                            event.key === "Enter" ||
+                                                                                            event.key === " "
+                                                                                        ) {
+                                                                                            event.preventDefault();
+                                                                                            toggleDocument(document.id);
+                                                                                        }
+                                                                                    }}
+                                                                                >
                                                                                     <div className="document-icon" aria-hidden="true">
                                                                                         <span>▣</span>
                                                                                     </div>
@@ -2267,6 +2429,13 @@ function ClassroomDetails() {
                                                                                                 : "attachments"}
                                                                                         </span>
                                                                                     </div>
+
+                                                                                    <span
+                                                                                        className="document-expand-icon"
+                                                                                        aria-hidden="true"
+                                                                                    >
+                                                                                        {expandedDocuments[document.id] ? "▲" : "▼"}
+                                                                                    </span>
                                                                                 </div>
                                                                                 {!isStudent && (
                                                                                     <div className="document-card-actions">
@@ -2292,6 +2461,8 @@ function ClassroomDetails() {
                                                                                 )}
                                                                             </div>
 
+                                                                            {expandedDocuments[document.id] && (
+                                                                                <>
                                                                             {document.content && (
                                                                                 <p className="document-card-description">
                                                                                     {document.content}
@@ -2399,6 +2570,8 @@ function ClassroomDetails() {
                                                                                             : "Add Files"}
                                                                                     </button>
                                                                                 </div>
+                                                                            )}
+                                                                                </>
                                                                             )}
                                                                         </article>
                                                                     );
@@ -3886,16 +4059,27 @@ function ClassroomDetails() {
                                     <div className="unsupported-file">
 
                                         <p>
-                                            This file type cannot be previewed.
+                                            This file type cannot be previewed inside the classroom.
                                         </p>
 
-                                        <a
-                                            href={selectedFile.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                        >
-                                            Open File
-                                        </a>
+                                        <div className="unsupported-file-actions">
+                                            <a
+                                                href={selectedFile.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="unsupported-file-open"
+                                            >
+                                                Open File
+                                            </a>
+
+                                            <button
+                                                type="button"
+                                                onClick={downloadSelectedFile}
+                                                className="unsupported-file-download"
+                                            >
+                                                Download
+                                            </button>
+                                        </div>
 
                                     </div>
 

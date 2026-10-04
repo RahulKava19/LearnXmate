@@ -7,72 +7,65 @@ import Classrooms from "./pages/Classrooms";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ClassroomDetails from "./pages/ClassroomDetails";
 import Assignments from "./pages/Assignments";
+import MeetingRoom from "./components/MeetingRoom";
 
 function App() {
-    return (
-        <BrowserRouter>
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public routes */}
 
-            <Routes>
+        <Route path="/" element={<Login />} />
 
-                {/* Public routes */}
+        <Route path="/login" element={<Login />} />
 
-                <Route
-                    path="/"
-                    element={<Login />}
-                />
+        <Route path="/register" element={<Register />} />
 
-                <Route
-                    path="/login"
-                    element={<Login />}
-                />
+        {/* Protected routes */}
 
-                <Route
-                    path="/register"
-                    element={<Register />}
-                />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
 
+        <Route
+          path="/classrooms"
+          element={
+            <ProtectedRoute>
+              <Classrooms />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/classrooms/:id"
+          element={
+            <ProtectedRoute>
+              <ClassroomDetails />
+            </ProtectedRoute>
+          }
+        />
 
-                {/* Protected routes */}
+        <Route
+          path="/assignments"
+          element={
+            <ProtectedRoute>
+              <Assignments />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route path="/meetings/:meetingCode" 
+        element={
+        <MeetingRoom />
+        } />
 
-                <Route
-                    path="/dashboard"
-                    element={
-                        <ProtectedRoute>
-                            <Dashboard />
-                        </ProtectedRoute>
-                    }
-                />
-
-                <Route
-                    path="/classrooms"
-                    element={
-                        <ProtectedRoute>
-                            <Classrooms />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/classrooms/:id"
-                    element={
-                        <ProtectedRoute>
-                            <ClassroomDetails />
-                        </ProtectedRoute>
-                    }
-                />
-
-                <Route
-                    path="/assignments"
-                    element={
-                        <ProtectedRoute>
-                            <Assignments />
-                        </ProtectedRoute>
-                    }
-                />
-                
-            </Routes>
-
-        </BrowserRouter>
-    );
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App;
