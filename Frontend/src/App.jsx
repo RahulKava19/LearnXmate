@@ -7,13 +7,17 @@ import Classrooms from "./pages/Classrooms";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ClassroomDetails from "./pages/ClassroomDetails";
 import Assignments from "./pages/Assignments";
+import Meetings from "./pages/Meetings";
 import MeetingRoom from "./components/MeetingRoom";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
+
+        {/* ========================= */}
+        {/* PUBLIC ROUTES */}
+        {/* ========================= */}
 
         <Route path="/" element={<Login />} />
 
@@ -21,7 +25,10 @@ function App() {
 
         <Route path="/register" element={<Register />} />
 
-        {/* Protected routes */}
+
+        {/* ========================= */}
+        {/* PROTECTED ROUTES */}
+        {/* ========================= */}
 
         <Route
           path="/dashboard"
@@ -32,6 +39,7 @@ function App() {
           }
         />
 
+
         <Route
           path="/classrooms"
           element={
@@ -40,6 +48,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+
         <Route
           path="/classrooms/:id"
           element={
@@ -49,6 +59,7 @@ function App() {
           }
         />
 
+
         <Route
           path="/assignments"
           element={
@@ -57,11 +68,34 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
-        <Route path="/meetings/:meetingCode" 
-        element={
-        <MeetingRoom />
-        } />
+
+
+        {/* ========================= */}
+        {/* MEETINGS PAGE */}
+        {/* ========================= */}
+
+        <Route
+          path="/meetings"
+          element={
+            <ProtectedRoute>
+              <Meetings />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* ========================= */}
+        {/* INDIVIDUAL MEETING ROOM */}
+        {/* ========================= */}
+
+        <Route
+          path="/meetings/:meetingCode"
+          element={
+            <ProtectedRoute>
+              <MeetingRoom />
+            </ProtectedRoute>
+          }
+        />
 
       </Routes>
     </BrowserRouter>

@@ -2219,9 +2219,6 @@ function ClassroomDetails() {
                                             <div className="section-header documents-section-header">
                                                 <div>
                                                     <h3>Documents</h3>
-                                                    <p className="tab-description">
-                                                        Reference materials and files for this classroom.
-                                                    </p>
                                                 </div>
 
                                                 {/* Keep the classroom document area clean once a document exists. */}
