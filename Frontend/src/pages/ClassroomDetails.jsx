@@ -1673,7 +1673,7 @@ function ClassroomDetails() {
     // =============================================
 
     const submitDraft = async (project) => {
-        const submission = submissions[project.id];
+        let submission = submissions[project.id];
 
         if (!submission || submission.status !== "draft") {
             return;
